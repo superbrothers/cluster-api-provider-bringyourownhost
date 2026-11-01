@@ -433,7 +433,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 
 	Context("ByoMachine to K8sInstallerConfig reconcile request", func() {
 		It("should not return reconcile request if ByoMachine InstallerRef doesn't exists", func() {
-			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(byoMachine)
+			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(ctx, byoMachine)
 			Expect(len(result)).To(BeZero())
 		})
 
@@ -450,7 +450,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 				return object.(*infrav1.ByoMachine).Spec.InstallerRef != nil
 			})
 
-			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(byoMachine)
+			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(ctx, byoMachine)
 			Expect(len(result)).To(BeZero())
 		})
 
@@ -468,7 +468,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 				return object.(*infrav1.ByoMachine).Spec.InstallerRef != nil
 			})
 
-			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(byoMachine)
+			result := k8sInstallerConfigReconciler.ByoMachineToK8sInstallerConfigMapFunc(ctx, byoMachine)
 			Expect(len(result)).NotTo(BeZero())
 		})
 	})

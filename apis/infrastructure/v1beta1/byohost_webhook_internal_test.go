@@ -22,10 +22,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 	schema := runtime.NewScheme()
 	err := AddToScheme(schema)
 	Expect(err).NotTo(HaveOccurred())
-	decoder, _ := admission.NewDecoder(schema)
-	v := &ByoHostValidator{
-		decoder: decoder,
-	}
+	v := NewByoHostValidator(schema)
 	Context("When ByoHost gets a create request", func() {
 		var (
 			byoHost    *ByoHost
@@ -59,7 +56,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(string(resp.AdmissionResponse.Result.Reason)).To(Equal(fmt.Sprintf("%s is not a valid agent username", "unauthorized-user")))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal(fmt.Sprintf("%s is not a valid agent username", "unauthorized-user")))
 		})
 		It("Should reject request from another agent user in the group", func() {
 			admissionRequest := admissionv1.AdmissionRequest{
@@ -72,7 +69,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(string(resp.AdmissionResponse.Result.Reason)).To(Equal(fmt.Sprintf("%s cannot create/update resource %s", "byoh:host:host2", "host1")))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal(fmt.Sprintf("%s cannot create/update resource %s", "byoh:host:host2", "host1")))
 		})
 		It("Should allow request from the valid agent user", func() {
 			admissionRequest := admissionv1.AdmissionRequest{
@@ -121,7 +118,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(string(resp.AdmissionResponse.Result.Reason)).To(Equal(fmt.Sprintf("%s is not a valid agent username", "unauthorized-user")))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal(fmt.Sprintf("%s is not a valid agent username", "unauthorized-user")))
 		})
 		It("Should allow update request from manager", func() {
 			admissionRequest := admissionv1.AdmissionRequest{
@@ -146,7 +143,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(string(resp.AdmissionResponse.Result.Reason)).To(Equal(fmt.Sprintf("%s cannot create/update resource %s", "byoh:host:host2", "host1")))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal(fmt.Sprintf("%s cannot create/update resource %s", "byoh:host:host2", "host1")))
 		})
 		It("Should allow request from the valid agent user", func() {
 			admissionRequest := admissionv1.AdmissionRequest{
@@ -214,7 +211,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(string(resp.AdmissionResponse.Result.Reason)).To(Equal("cannot delete ByoHost when MachineRef is assigned"))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal("cannot delete ByoHost when MachineRef is assigned"))
 		})
 	})
 })
