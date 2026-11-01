@@ -25,8 +25,9 @@ type ByoHostValidator struct {
 // To allow byoh manager service account to patch ByoHost CR
 const managerServiceAccount = "system:serviceaccount:byoh-system:byoh-controller-manager"
 
-//nolint: gocritic
 // Handle handles all the requests for ByoHost resource
+//
+//nolint:gocritic
 func (v *ByoHostValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	var response admission.Response
 

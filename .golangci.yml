@@ -1,20 +1,14 @@
-# golangci.com configuration
-# https://github.com/golangci/golangci/wiki/Configuration
-service:
-  golangci-lint-version: 1.50.0 # use the fixed version to not introduce new linters unexpectedly
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
-  skip-dirs:
-    - ".*fakes/"
-  skip-files:
-    - ".*dummy.go"
   timeout: 10m
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - bodyclose
-    - depguard
     - dogsled
     - dupl
     - dupword
@@ -24,24 +18,18 @@ linters:
     - gocritic
     - gocyclo
     - goheader
-#    - goimports
-    - gomnd
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - misspell
+    - mnd
     - nakedret
     - noctx
-    # - nolintlint
     - rowserrcheck
     - staticcheck
-    - stylecheck
     - testpackage
-    - typecheck
     - unconvert
-#    - unparam
     - unused
     - whitespace
 
@@ -53,79 +41,87 @@ linters:
   # - gocognit
   # - godot
   # - godox
-  # - goerr113
-  # - interfacer
+  # - err113
   # - lll
   # - nestif
+  # - nolintlint
   # - prealloc
   # - revive
-  # - scopelint
+  # - unparam
   # - wsl
 
-linters-settings:
-  dupl:
-    threshold: 100
-  funlen:
-    lines: 100
-    statements: 50
-  goheader:
-    values:
-      const:
-        COMPANY: VMware, Inc.
-        LICENSE: Apache-2.0
-      regexp:
-        YEAR: 20\d*-*\d*
-    template: |-
-      Copyright {{ YEAR }} {{ COMPANY }} All Rights Reserved.
-      SPDX-License-Identifier: {{ LICENSE }}
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  gocyclo:
-    min-complexity: 15
-  goimports:
-    local-prefixes: github.com/vmware-tanzu
-  gomnd:
-    settings:
-      mnd:
-        checks:
+  settings:
+    dupl:
+      threshold: 100
+    funlen:
+      lines: 100
+      statements: 50
+    goheader:
+      values:
+        const:
+          LICENSE: Apache-2.0
+        regexp:
+          YEAR: 20\d*-*\d*
+          # Files from upstream keep the VMware notice; files added in this
+          # fork use the project authors.
+          HOLDER: (VMware, Inc\. All Rights Reserved\.|The Cluster API Provider BringYourOwnHost Authors\.)
+      template: |-
+        Copyright {{ YEAR }} {{ HOLDER }}
+        SPDX-License-Identifier: {{ LICENSE }}
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+    gocyclo:
+      min-complexity: 15
+    govet:
+      enable:
+        - shadow
+    misspell:
+      locale: US
+    mnd:
+      checks:
         - argument
         - case
         - condition
         - return
-        ignored-functions:
+      ignored-functions:
         - log.*
-  govet:
-    check-shadowing: true
-  misspell:
-    locale: US
-  nolintlint:
-    allow-leading-space: true # don't require machine-readable nolint directives (i.e. with no leading space)
-    allow-unused: false # report any unused nolint directives
-    require-explanation: false # don't require an explanation for nolint directives
-    require-specific: false # don't require nolint directives to be specific about which linter is being skipped
-  whitespace:
-    multi-func: true
-  gofmt:
-    # simplify code: gofmt with `-s` option, true by default
-    simplify: true
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - dupl
-        - gosec
+    whitespace:
+      multi-func: true
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - .*fakes/
+      - .*dummy.go
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - dupl
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true
