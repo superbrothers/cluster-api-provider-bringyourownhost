@@ -7,14 +7,11 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"net/url"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -25,8 +22,7 @@ var bootstrapkubeconfiglog = logf.Log.WithName("bootstrapkubeconfig-resource")
 const APIServerURLScheme = "https"
 
 func (r *BootstrapKubeconfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+	return ctrl.NewWebhookManagedBy(mgr, r).
 		WithValidator(&bootstrapKubeconfigValidator{}).
 		Complete()
 }
@@ -36,47 +32,27 @@ func (r *BootstrapKubeconfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // bootstrapKubeconfigValidator validates BootstrapKubeconfig objects.
 type bootstrapKubeconfigValidator struct{}
 
-var _ webhook.CustomValidator = &bootstrapKubeconfigValidator{}
+var _ admission.Validator[*BootstrapKubeconfig] = &bootstrapKubeconfigValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (*bootstrapKubeconfigValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	r, err := toBootstrapKubeconfig(obj)
-	if err != nil {
-		return nil, err
-	}
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateCreate(_ context.Context, r *BootstrapKubeconfig) (admission.Warnings, error) {
 	bootstrapkubeconfiglog.Info("validate create", "name", r.Name)
 
 	return nil, r.validate()
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (*bootstrapKubeconfigValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
-	r, err := toBootstrapKubeconfig(newObj)
-	if err != nil {
-		return nil, err
-	}
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateUpdate(_ context.Context, _, r *BootstrapKubeconfig) (admission.Warnings, error) {
 	bootstrapkubeconfiglog.Info("validate update", "name", r.Name)
 
 	return nil, r.validate()
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (*bootstrapKubeconfigValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	r, err := toBootstrapKubeconfig(obj)
-	if err != nil {
-		return nil, err
-	}
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateDelete(_ context.Context, r *BootstrapKubeconfig) (admission.Warnings, error) {
 	bootstrapkubeconfiglog.Info("validate delete", "name", r.Name)
 
 	return nil, nil
-}
-
-func toBootstrapKubeconfig(obj runtime.Object) (*BootstrapKubeconfig, error) {
-	r, ok := obj.(*BootstrapKubeconfig)
-	if !ok {
-		return nil, fmt.Errorf("expected a BootstrapKubeconfig but got a %T", obj)
-	}
-	return r, nil
 }
 
 func (r *BootstrapKubeconfig) validate() error {

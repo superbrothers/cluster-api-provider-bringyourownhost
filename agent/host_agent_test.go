@@ -32,8 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 )
 
 var _ = Describe("Agent", func() {
@@ -283,7 +283,7 @@ var _ = Describe("Agent", func() {
 					return err
 				}).Should(BeNil())
 
-				patchHelper, _ := patch.NewHelper(byoHost, k8sClient)
+				patchHelper, _ := v1beta1patch.NewHelper(byoHost, k8sClient)
 				byoHost.Status.MachineRef = &corev1.ObjectReference{
 					APIVersion: byoMachine.APIVersion,
 					Kind:       byoMachine.Kind,
@@ -316,7 +316,7 @@ var _ = Describe("Agent", func() {
 					UID:        fakeInstallationSecret.UID,
 				}
 
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 			})
 
 			It("should run the script to install k8s components", func() {
@@ -332,7 +332,7 @@ var _ = Describe("Agent", func() {
 				Eventually(func() (condition corev1.ConditionStatus) {
 					err := k8sClient.Get(ctx, namespace, updatedByoHost)
 					if err == nil {
-						kubeInstallStatus := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+						kubeInstallStatus := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
 						if kubeInstallStatus != nil {
 							return kubeInstallStatus.Status
 						}

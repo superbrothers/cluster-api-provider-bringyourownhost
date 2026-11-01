@@ -13,7 +13,7 @@ import (
 	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/builder"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 )
 
 var _ = Describe("BootstrapKubeconfig Webhook", func() {
@@ -129,7 +129,7 @@ var _ = Describe("BootstrapKubeconfig Webhook", func() {
 
 	Context("When BootstrapKubeconfig gets an update request", func() {
 		var (
-			ph                         *patch.Helper
+			ph                         *v1beta1patch.Helper
 			createdBootstrapKubeconfig *byohv1beta1.BootstrapKubeconfig
 		)
 		BeforeEach(func() {
@@ -154,7 +154,7 @@ var _ = Describe("BootstrapKubeconfig Webhook", func() {
 			}).Should(BeNil())
 
 			// create a patch helper
-			ph, err = patch.NewHelper(bootstrapKubeconfig, k8sClient)
+			ph, err = v1beta1patch.NewHelper(bootstrapKubeconfig, k8sClient)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 

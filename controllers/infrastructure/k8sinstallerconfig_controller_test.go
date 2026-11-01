@@ -17,11 +17,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -153,18 +154,18 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			NamespacedName: types.NamespacedName{
 				Name:      k8sinstallerconfigWithNonExistingCluster.Name,
 				Namespace: k8sinstallerconfigWithNonExistingCluster.Namespace}})
-		Expect(err).To(MatchError("failed to get Cluster/non-existent-cluster: Cluster.cluster.x-k8s.io \"non-existent-cluster\" not found"))
+		Expect(err).To(MatchError("failed to get Cluster default/non-existent-cluster: Cluster.cluster.x-k8s.io \"non-existent-cluster\" not found"))
 	})
 
 	It("should ignore when k8sinstallerconfig is paused", func() {
 
-		ph, err := patch.NewHelper(k8sinstallerConfig, k8sClientUncached)
+		ph, err := v1beta1patch.NewHelper(k8sinstallerConfig, k8sClientUncached)
 		Expect(err).ShouldNot(HaveOccurred())
 		pauseAnnotations := map[string]string{
 			clusterv1.PausedAnnotation: "paused",
 		}
 		annotations.AddAnnotations(k8sinstallerConfig, pauseAnnotations)
-		Expect(ph.Patch(ctx, k8sinstallerConfig, patch.WithStatusObservedGeneration{})).Should(Succeed())
+		Expect(ph.Patch(ctx, k8sinstallerConfig, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 		WaitForObjectToBeUpdatedInCache(k8sinstallerConfig, func(object client.Object) bool {
 			return annotations.HasPaused(object.(*infrav1.K8sInstallerConfig))
 		})
@@ -187,18 +188,18 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 	Context("When ByoMachine wait for InstallerSecret", func() {
 
 		BeforeEach(func() {
-			ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			byoMachine.Status.HostInfo = infrav1.HostInfo{
 				Architecture: "amd64",
 				OSName:       "linux",
 				OSImage:      "Ubuntu 20.04.1 LTS",
 			}
-			conditions.Set(byoMachine, &clusterv1.Condition{
+			v1beta1conditions.Set(byoMachine, &clusterv1beta1.Condition{
 				Type:   infrav1.BYOHostReady,
 				Reason: infrav1.InstallationSecretNotAvailableReason,
 			})
-			Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
 				return object.(*infrav1.ByoMachine).Status.HostInfo.Architecture == "amd64"
 			})
@@ -219,10 +220,10 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 
 		It("should ignore when K8sInstallerConfig status is ready", func() {
 
-			ph, err := patch.NewHelper(k8sinstallerConfig, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(k8sinstallerConfig, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			k8sinstallerConfig.Status.Ready = true
-			Expect(ph.Patch(ctx, k8sinstallerConfig, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, k8sinstallerConfig, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(k8sinstallerConfig, func(object client.Object) bool {
 				return object.(*infrav1.K8sInstallerConfig).Status.Ready
 			})
@@ -235,11 +236,11 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		})
 
 		It("should throw error if os distribution is not supported", func() {
-			ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			unsupportedOsDist := "unsupportedOsDist"
 			byoMachine.Status.HostInfo.OSImage = unsupportedOsDist
-			Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
 				return object.(*infrav1.ByoMachine).Status.HostInfo.OSImage == unsupportedOsDist
 			})
@@ -252,11 +253,11 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		})
 
 		It("should throw error if architecture is not supported", func() {
-			ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			unsupportedArch := "unsupportedArch"
 			byoMachine.Status.HostInfo.Architecture = unsupportedArch
-			Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
 				return object.(*infrav1.ByoMachine).Status.HostInfo.Architecture == unsupportedArch
 			})
@@ -400,10 +401,10 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 
 			Context("When owner ByoMachine not found", func() {
 				BeforeEach(func() {
-					ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+					ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 					Expect(err).ShouldNot(HaveOccurred())
 					controllerutil.AddFinalizer(byoMachine, infrav1.MachineFinalizer)
-					Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+					Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 
 					Expect(k8sClientUncached.Delete(ctx, byoMachine)).Should(Succeed())
 					WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
@@ -438,14 +439,14 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		})
 
 		It("should not return reconcile request if ByoMachine InstallerRef doesn't refer to K8sInstallerConfitTemplate", func() {
-			ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			byoMachine.Spec.InstallerRef = &corev1.ObjectReference{
 				Kind:      "RandomInstallerTemplate",
 				Name:      k8sinstallerConfig.Name,
 				Namespace: k8sinstallerConfig.Namespace,
 			}
-			Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
 				return object.(*infrav1.ByoMachine).Spec.InstallerRef != nil
 			})
@@ -455,7 +456,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		})
 
 		It("should return reconcile request if ByoMachine refer to K8sInstallerConfigTemplate installer", func() {
-			ph, err := patch.NewHelper(byoMachine, k8sClientUncached)
+			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			byoMachine.Spec.InstallerRef = &corev1.ObjectReference{
 				Kind:       "K8sInstallerConfigTemplate",
@@ -463,7 +464,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 				Namespace:  k8sinstallerConfigTemplate.Namespace,
 				APIVersion: infrav1.GroupVersion.String(),
 			}
-			Expect(ph.Patch(ctx, byoMachine, patch.WithStatusObservedGeneration{})).Should(Succeed())
+			Expect(ph.Patch(ctx, byoMachine, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			WaitForObjectToBeUpdatedInCache(byoMachine, func(object client.Object) bool {
 				return object.(*infrav1.ByoMachine).Spec.InstallerRef != nil
 			})

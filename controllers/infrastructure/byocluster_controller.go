@@ -19,12 +19,13 @@ import (
 
 	"github.com/pkg/errors"
 	infrav1 "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 
 	clusterutilv1 "sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 )
 
 var (
@@ -76,7 +77,7 @@ func (r *ByoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Create the patch helper.
-	patchHelper, err := patch.NewHelper(byoCluster, r.Client)
+	patchHelper, err := v1beta1patch.NewHelper(byoCluster, r.Client)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrapf(
 			err,
@@ -106,19 +107,19 @@ func (r *ByoClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.reconcileNormal(ctx, byoCluster)
 }
 
-func patchByoCluster(ctx context.Context, patchHelper *patch.Helper, byoCluster *infrav1.ByoCluster) error {
+func patchByoCluster(ctx context.Context, patchHelper *v1beta1patch.Helper, byoCluster *infrav1.ByoCluster) error {
 	// Always update the readyCondition by summarizing the state of other conditions.
 	// A step counter is added to represent progress during the provisioning process (instead we are hiding it during the deletion process).
-	conditions.SetSummary(byoCluster,
-		conditions.WithStepCounterIf(byoCluster.ObjectMeta.DeletionTimestamp.IsZero()),
+	v1beta1conditions.SetSummary(byoCluster,
+		v1beta1conditions.WithStepCounterIf(byoCluster.ObjectMeta.DeletionTimestamp.IsZero()),
 	)
 
 	// Patch the object, ignoring conflicts on the conditions owned by this controller.
 	return patchHelper.Patch(
 		ctx,
 		byoCluster,
-		patch.WithOwnedConditions{Conditions: []clusterv1.ConditionType{
-			clusterv1.ReadyCondition,
+		v1beta1patch.WithOwnedConditions{Conditions: []clusterv1beta1.ConditionType{
+			clusterv1beta1.ReadyCondition,
 		}},
 	)
 }

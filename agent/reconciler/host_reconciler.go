@@ -15,9 +15,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,7 +57,7 @@ func (r *HostReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctr
 		logger.Error(err, "error getting ByoHost")
 		return ctrl.Result{}, err
 	}
-	helper, _ := patch.NewHelper(byoHost, r.Client)
+	helper, _ := v1beta1patch.NewHelper(byoHost, r.Client)
 	defer func() {
 		err = helper.Patch(ctx, byoHost)
 		if err != nil && reterr == nil {
@@ -89,17 +90,17 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 	logger.Info("reconcile normal")
 	if byoHost.Status.MachineRef == nil {
 		logger.Info("Machine ref not yet set")
-		conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.WaitingForMachineRefReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.WaitingForMachineRefReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
 	}
 
 	if byoHost.Spec.BootstrapSecret == nil {
 		logger.Info("BootstrapDataSecret not ready")
-		conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.BootstrapDataSecretUnavailableReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.BootstrapDataSecretUnavailableReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
 	}
 
-	if !conditions.IsTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded) {
+	if !v1beta1conditions.IsTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded) {
 		bootstrapScript, err := r.getBootstrapScript(ctx, byoHost.Spec.BootstrapSecret.Name, byoHost.Spec.BootstrapSecret.Namespace)
 		if err != nil {
 			logger.Error(err, "error getting bootstrap script")
@@ -109,10 +110,10 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 
 		if r.SkipK8sInstallation {
 			logger.Info("Skipping installation of k8s components")
-		} else if !conditions.IsTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded) {
+		} else if !v1beta1conditions.IsTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded) {
 			if byoHost.Spec.InstallationSecret == nil {
 				logger.Info("InstallationSecret not ready")
-				conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sInstallationSecretUnavailableReason, clusterv1.ConditionSeverityInfo, "")
+				v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sInstallationSecretUnavailableReason, clusterv1beta1.ConditionSeverityInfo, "")
 				return ctrl.Result{}, nil
 			}
 			err = r.executeInstallerController(ctx, byoHost)
@@ -120,7 +121,7 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 				return ctrl.Result{}, err
 			}
 			r.Recorder.Event(byoHost, corev1.EventTypeNormal, "InstallScriptExecutionSucceeded", "install script executed")
-			conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+			v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
 		} else {
 			logger.Info("install script already executed")
 		}
@@ -129,7 +130,7 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 		if err != nil {
 			logger.Error(err, "error cleaning up k8s directories, please delete it manually for reconcile to proceed.")
 			r.Recorder.Event(byoHost, corev1.EventTypeWarning, "CleanK8sDirectoriesFailed", "clean k8s directories failed")
-			conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CleanK8sDirectoriesFailedReason, clusterv1.ConditionSeverityError, "")
+			v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CleanK8sDirectoriesFailedReason, clusterv1beta1.ConditionSeverityError, "")
 			return ctrl.Result{}, err
 		}
 
@@ -138,12 +139,12 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 			logger.Error(err, "error in bootstrapping k8s node")
 			r.Recorder.Event(byoHost, corev1.EventTypeWarning, "BootstrapK8sNodeFailed", "k8s Node Bootstrap failed")
 			_ = r.resetNode(ctx, byoHost)
-			conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CloudInitExecutionFailedReason, clusterv1.ConditionSeverityError, "")
+			v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CloudInitExecutionFailedReason, clusterv1beta1.ConditionSeverityError, "")
 			return ctrl.Result{}, err
 		}
 		logger.Info("k8s node successfully bootstrapped")
 		r.Recorder.Event(byoHost, corev1.EventTypeNormal, "BootstrapK8sNodeSucceeded", "k8s Node Bootstraped")
-		conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+		v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 	}
 
 	return ctrl.Result{}, nil
@@ -171,7 +172,7 @@ func (r *HostReconciler) executeInstallerController(ctx context.Context, byoHost
 	if err != nil {
 		logger.Error(err, "error executing installation script")
 		r.Recorder.Event(byoHost, corev1.EventTypeWarning, "InstallScriptExecutionFailed", "install script execution failed")
-		conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sComponentsInstallationFailedReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sComponentsInstallationFailedReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return err
 	}
 	return nil
@@ -244,7 +245,7 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("cleaning up host")
 
-	k8sComponentsInstallationSucceeded := conditions.Get(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+	k8sComponentsInstallationSucceeded := v1beta1conditions.Get(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
 	if k8sComponentsInstallationSucceeded != nil && k8sComponentsInstallationSucceeded.Status == corev1.ConditionTrue {
 		err := r.resetNode(ctx, byoHost)
 		if err != nil {
@@ -270,12 +271,12 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 				return err
 			}
 		}
-		conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1beta1.ConditionSeverityInfo, "")
 		logger.Info("host removed from the cluster and the uninstall is executed successfully")
 	} else {
 		logger.Info("Skipping k8s node reset and k8s component uninstallation")
 	}
-	conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1.ConditionSeverityInfo, "")
+	v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1beta1.ConditionSeverityInfo, "")
 
 	err := r.removeSentinelFile(ctx, byoHost)
 	if err != nil {
@@ -290,7 +291,7 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 	byoHost.Spec.InstallationSecret = nil
 	byoHost.Spec.UninstallationScript = nil
 	r.removeAnnotations(ctx, byoHost)
-	conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1.ConditionSeverityInfo, "")
+	v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.K8sNodeAbsentReason, clusterv1beta1.ConditionSeverityInfo, "")
 	return nil
 }
 

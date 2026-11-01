@@ -18,11 +18,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	"sigs.k8s.io/cluster-api/controllers/external"
 	"sigs.k8s.io/cluster-api/util"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -37,7 +38,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util/annotations"
 )
 
@@ -133,7 +135,7 @@ func (r *ByoMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	helper, _ := patch.NewHelper(byoMachine, r.Client)
+	helper, _ := v1beta1patch.NewHelper(byoMachine, r.Client)
 	defer func() {
 		if err = helper.Patch(ctx, byoMachine); err != nil && reterr == nil {
 			logger.Error(err, "failed to patch byomachine")
@@ -171,7 +173,7 @@ func (r *ByoMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error(err, "cannot set paused annotation for byohost")
 			}
 		}
-		conditions.MarkFalse(byoMachine, infrav1.BYOHostReady, infrav1.ClusterOrResourcePausedReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(byoMachine, infrav1.BYOHostReady, infrav1.ClusterOrResourcePausedReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
 	}
 
@@ -251,15 +253,15 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 		}
 	}
 
-	if !machineScope.Cluster.Status.InfrastructureReady {
+	if !ptr.Deref(machineScope.Cluster.Status.Initialization.InfrastructureProvisioned, false) {
 		logger.Info("Cluster infrastructure is not ready yet")
-		conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.WaitingForClusterInfrastructureReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.WaitingForClusterInfrastructureReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return reconcile.Result{}, nil
 	}
 
 	if machineScope.Machine.Spec.Bootstrap.DataSecretName == nil {
 		logger.Info("Bootstrap Data Secret not available yet")
-		conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.WaitingForBootstrapDataSecretReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.WaitingForBootstrapDataSecretReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return reconcile.Result{}, nil
 	}
 
@@ -270,7 +272,7 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 		if res, err := r.attachByoHost(ctx, machineScope); err != nil {
 			return res, err
 		}
-		conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.InstallationSecretNotAvailableReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.InstallationSecretNotAvailableReason, clusterv1beta1.ConditionSeverityInfo, "")
 		r.Recorder.Eventf(machineScope.ByoHost, corev1.EventTypeNormal, "ByoHostAttachSucceeded", "Attached to ByoMachine %s", machineScope.ByoMachine.Name)
 		r.Recorder.Eventf(machineScope.ByoMachine, corev1.EventTypeNormal, "ByoHostAttachSucceeded", "Attached ByoHost %s", machineScope.ByoHost.Name)
 	}
@@ -311,7 +313,7 @@ func (r *ByoMachineReconciler) updateNodeProviderID(ctx context.Context, machine
 
 	machineScope.ByoMachine.Spec.ProviderID = providerID
 	machineScope.ByoMachine.Status.Ready = true
-	conditions.MarkTrue(machineScope.ByoMachine, infrav1.BYOHostReady)
+	v1beta1conditions.MarkTrue(machineScope.ByoMachine, infrav1.BYOHostReady)
 	r.Recorder.Eventf(machineScope.ByoMachine, corev1.EventTypeNormal, "NodeProvisionedSucceeded", "Provisioned Node %s", machineScope.ByoHost.Name)
 	return ctrl.Result{}, nil
 }
@@ -340,7 +342,7 @@ func (r *ByoMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 		Watches(
 			&clusterv1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(ClusterToByoMachines),
-			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureReady(mgr.GetScheme(), ctrl.LoggerFrom(ctx))),
+			builder.WithPredicates(predicates.ClusterUnpausedAndInfrastructureProvisioned(mgr.GetScheme(), ctrl.LoggerFrom(ctx))),
 		).
 		Complete(r)
 }
@@ -403,7 +405,7 @@ func (r *ByoMachineReconciler) setNodeProviderID(ctx context.Context, remoteClie
 		return "", errors.New("invalid format for node.Spec.ProviderID")
 	}
 
-	helper, err := patch.NewHelper(node, remoteClient)
+	helper, err := v1beta1patch.NewHelper(node, remoteClient)
 	if err != nil {
 		return "", err
 	}
@@ -427,7 +429,7 @@ func (r *ByoMachineReconciler) getRemoteClient(ctx context.Context, byoMachine *
 }
 
 func (r *ByoMachineReconciler) setPausedConditionForByoHost(ctx context.Context, machineScope *byoMachineScope, isPaused bool) error {
-	helper, err := patch.NewHelper(machineScope.ByoHost, r.Client)
+	helper, err := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
 	if err != nil {
 		return err
 	}
@@ -455,7 +457,7 @@ func (r *ByoMachineReconciler) setInstallationSecretForByoHost(ctx context.Conte
 		return ctrl.Result{RequeueAfter: RequeueInstallerConfigTime}, nil
 	}
 
-	helper, err := patch.NewHelper(machineScope.ByoHost, r.Client)
+	helper, err := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -517,13 +519,13 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	if len(hostsList.Items) == 0 {
 		logger.Info("No hosts found, waiting..")
 		r.Recorder.Eventf(machineScope.ByoMachine, corev1.EventTypeWarning, "ByoHostSelectionFailed", "No available ByoHost")
-		conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.BYOHostsUnavailableReason, clusterv1.ConditionSeverityInfo, "")
+		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.BYOHostsUnavailableReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return ctrl.Result{RequeueAfter: RequeueForbyohost}, errors.New("no hosts found")
 	}
 	// TODO- Needs smarter logic
 	host := hostsList.Items[0]
 
-	byohostHelper, err := patch.NewHelper(&host, r.Client)
+	byohostHelper, err := v1beta1patch.NewHelper(&host, r.Client)
 	if err != nil {
 		logger.Error(err, "Creating patch helper failed")
 	}
@@ -553,7 +555,7 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 		host.Annotations = make(map[string]string)
 	}
 	host.Annotations[infrav1.EndPointIPAnnotation] = machineScope.Cluster.Spec.ControlPlaneEndpoint.Host
-	host.Annotations[infrav1.K8sVersionAnnotation] = strings.Split(*machineScope.Machine.Spec.Version, "+")[0]
+	host.Annotations[infrav1.K8sVersionAnnotation] = strings.Split(machineScope.Machine.Spec.Version, "+")[0]
 	host.Annotations[infrav1.BundleLookupBaseRegistryAnnotation] = machineScope.ByoCluster.Spec.BundleLookupBaseRegistry
 
 	err = byohostHelper.Patch(ctx, &host)
@@ -598,7 +600,7 @@ func ByoHostToByoMachineMapFunc(gvk schema.GroupVersionKind) handler.MapFunc {
 }
 
 func (r *ByoMachineReconciler) markHostForCleanup(ctx context.Context, machineScope *byoMachineScope) error {
-	helper, _ := patch.NewHelper(machineScope.ByoHost, r.Client)
+	helper, _ := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
 
 	if machineScope.ByoHost.Annotations == nil {
 		machineScope.ByoHost.Annotations = map[string]string{}
@@ -643,7 +645,7 @@ func (r *ByoMachineReconciler) createInstallerConfig(ctx context.Context, machin
 			return err
 		}
 		installerAnnotations := map[string]string{
-			infrav1.K8sVersionAnnotation: strings.Split(*machineScope.Machine.Spec.Version, "+")[0],
+			infrav1.K8sVersionAnnotation: strings.Split(machineScope.Machine.Spec.Version, "+")[0],
 		}
 		installerConfig, err = external.GenerateTemplate(&external.GenerateTemplateInput{
 			Template:    template,

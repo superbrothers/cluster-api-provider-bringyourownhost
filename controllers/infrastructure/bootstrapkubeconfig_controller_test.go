@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -62,7 +62,7 @@ var _ = Describe("Controllers/BoottrapKubeconfigController", func() {
 		})
 
 		It("should return empty result if BootstrapKubeconfigData is already present", func() {
-			helper, err := patch.NewHelper(bootstrapKubeConfig, k8sClientUncached)
+			helper, err := v1beta1patch.NewHelper(bootstrapKubeConfig, k8sClientUncached)
 			Expect(err).NotTo(HaveOccurred())
 			bootstrapKubeConfig.Status.BootstrapKubeconfigData = &existingBootstrapKubeconfigData
 			Expect(helper.Patch(ctx, bootstrapKubeConfig)).NotTo(HaveOccurred())

@@ -17,11 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/pointer"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -83,7 +83,7 @@ func (r *K8sInstallerConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	helper, err := patch.NewHelper(config, r.Client)
+	helper, err := v1beta1patch.NewHelper(config, r.Client)
 	if err != nil {
 		logger.Error(err, "unable to create helper")
 		return ctrl.Result{}, err
@@ -130,8 +130,8 @@ func (r *K8sInstallerConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	switch {
 	// waiting for ByoMachine to updating it's ByoHostReady condition to false for reason InstallationSecretNotAvailableReason
-	case conditions.GetReason(byoMachine, infrav1.BYOHostReady) != infrav1.InstallationSecretNotAvailableReason:
-		logger.Info("ByoMachine is not waiting for InstallationSecret", "reason", conditions.GetReason(byoMachine, infrav1.BYOHostReady))
+	case v1beta1conditions.GetReason(byoMachine, infrav1.BYOHostReady) != infrav1.InstallationSecretNotAvailableReason:
+		logger.Info("ByoMachine is not waiting for InstallationSecret", "reason", v1beta1conditions.GetReason(byoMachine, infrav1.BYOHostReady))
 		return ctrl.Result{}, nil
 	// Status is ready means a config has been generated.
 	case config.Status.Ready:

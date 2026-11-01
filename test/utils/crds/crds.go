@@ -21,7 +21,7 @@ func ClusterAPICoreDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "config", "crd", "bases"), nil
+	return filepath.Join(dir, "core", "config", "crd", "bases"), nil
 }
 
 // ClusterAPIKubeadmBootstrapDir returns the directory of the kubeadm

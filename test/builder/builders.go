@@ -14,7 +14,8 @@ import (
 	certv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"k8s.io/utils/ptr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 // ByoMachineBuilder holds the variables and objects required to build an infrastructurev1beta1.ByoMachine
@@ -243,16 +244,30 @@ func (m *MachineBuilder) Build() *clusterv1.Machine {
 		},
 		Spec: clusterv1.MachineSpec{
 			ClusterName: m.cluster,
+			// The Machine CRD requires an infrastructure reference. Tests
+			// don't resolve it, so it points at a ByoMachine of the same name.
+			InfrastructureRef: clusterv1.ContractVersionedObjectReference{
+				APIGroup: infrastructurev1beta1.GroupVersion.Group,
+				Kind:     "ByoMachine",
+				Name:     m.name,
+			},
 		},
 	}
 	// The Machine CRD rejects an empty version, so set it only when given.
 	if m.version != "" {
-		machine.Spec.Version = &m.version
+		machine.Spec.Version = m.version
+	}
+	// The Machine CRD requires bootstrap settings, so the Machine refers to
+	// a KubeadmConfig, and gets the data secret when one is given.
+	machine.Spec.Bootstrap = clusterv1.Bootstrap{
+		ConfigRef: clusterv1.ContractVersionedObjectReference{
+			APIGroup: "bootstrap.cluster.x-k8s.io",
+			Kind:     "KubeadmConfig",
+			Name:     m.name,
+		},
 	}
 	if m.bootstrapDataSecret != "" {
-		machine.Spec.Bootstrap = clusterv1.Bootstrap{
-			DataSecretName: &m.bootstrapDataSecret,
-		}
+		machine.Spec.Bootstrap.DataSecretName = &m.bootstrapDataSecret
 	}
 
 	return machine
@@ -297,18 +312,17 @@ func (c *ClusterBuilder) Build() *clusterv1.Cluster {
 			Name:      c.name,
 			Namespace: c.namespace,
 		},
-		Spec: clusterv1.ClusterSpec{},
-	}
-	if c.paused {
-		cluster.Spec.Paused = c.paused
+		// The Cluster CRD rejects an empty spec, so paused is always set.
+		Spec: clusterv1.ClusterSpec{
+			Paused: ptr.To(c.paused),
+		},
 	}
 
 	if c.byoCluster != nil {
-		cluster.Spec.InfrastructureRef = &corev1.ObjectReference{
-			Kind:      "ByoCluster",
-			Namespace: c.byoCluster.Namespace,
-			Name:      c.byoCluster.Name,
-			UID:       c.byoCluster.UID,
+		cluster.Spec.InfrastructureRef = clusterv1.ContractVersionedObjectReference{
+			APIGroup: infrastructurev1beta1.GroupVersion.Group,
+			Kind:     "ByoCluster",
+			Name:     c.byoCluster.Name,
 		}
 	}
 
