@@ -131,7 +131,7 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 				Flavor:                   clusterctl.DefaultFlavor,
 				Namespace:                namespace.Name,
 				ClusterName:              clusterName,
-				KubernetesVersion:        e2eConfig.GetVariable(KubernetesVersion),
+				KubernetesVersion:        e2eConfig.MustGetVariable(KubernetesVersion),
 				ControlPlaneMachineCount: pointer.Int64(1),
 				WorkerMachineCount:       pointer.Int64(1),
 			},
@@ -150,8 +150,8 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 
 		By("Delete the cluster and freeing the ByoHosts")
 		framework.DeleteAllClustersAndWait(ctx, framework.DeleteAllClustersAndWaitInput{
-			Client:    bootstrapClusterProxy.GetClient(),
-			Namespace: namespace.Name,
+			ClusterProxy: bootstrapClusterProxy,
+			Namespace:    namespace.Name,
 		}, e2eConfig.GetIntervals(specName, "wait-delete-cluster")...)
 
 		// Assert if cluster label is removed
@@ -174,7 +174,7 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 				Flavor:                   clusterctl.DefaultFlavor,
 				Namespace:                namespace.Name,
 				ClusterName:              clusterName,
-				KubernetesVersion:        e2eConfig.GetVariable(KubernetesVersion),
+				KubernetesVersion:        e2eConfig.MustGetVariable(KubernetesVersion),
 				ControlPlaneMachineCount: pointer.Int64(1),
 				WorkerMachineCount:       pointer.Int64(1),
 			},
@@ -207,7 +207,7 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 				err := getDockerClient().ContainerStop(ctx, byohostContainerID, container.StopOptions{})
 				Expect(err).NotTo(HaveOccurred())
 
-				err = getDockerClient().ContainerRemove(ctx, byohostContainerID, types.ContainerRemoveOptions{})
+				err = getDockerClient().ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
 				Expect(err).NotTo(HaveOccurred())
 			}
 		}

@@ -125,7 +125,7 @@ var _ = Describe("When BYOH joins existing cluster [Cluster-Class]", func() {
 				Flavor:                   "topology",
 				Namespace:                namespace.Name,
 				ClusterName:              clusterName,
-				KubernetesVersion:        e2eConfig.GetVariable(KubernetesVersion),
+				KubernetesVersion:        e2eConfig.MustGetVariable(KubernetesVersion),
 				ControlPlaneMachineCount: pointer.Int64(1),
 				WorkerMachineCount:       pointer.Int64(1),
 			},
@@ -151,7 +151,7 @@ var _ = Describe("When BYOH joins existing cluster [Cluster-Class]", func() {
 				err := dockerClient.ContainerStop(ctx, byohostContainerID, container.StopOptions{})
 				Expect(err).NotTo(HaveOccurred())
 
-				err = dockerClient.ContainerRemove(ctx, byohostContainerID, types.ContainerRemoveOptions{})
+				err = dockerClient.ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
 				Expect(err).NotTo(HaveOccurred())
 			}
 		}

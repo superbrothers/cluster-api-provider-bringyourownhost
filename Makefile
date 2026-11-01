@@ -35,7 +35,7 @@ GINKGO_PKG := github.com/onsi/ginkgo/v2/ginkgo
 SETUP_ENVTEST_VER := v0.25.2
 SETUP_ENVTEST := $(TOOLS_BIN_DIR)/setup-envtest
 # Kubernetes version of the control plane binaries that envtest runs.
-ENVTEST_K8S_VERSION ?= 1.28.3
+ENVTEST_K8S_VERSION ?= 1.32.0
 ENVTEST_ASSETS = KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use -p path --bin-dir $(TOOLS_BIN_DIR) $(ENVTEST_K8S_VERSION))"
 
 BYOH_TEMPLATES := $(REPO_ROOT)/test/e2e/data/infrastructure-provider-byoh

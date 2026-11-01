@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	dClient "github.com/docker/docker/client"
 	. "github.com/onsi/ginkgo/v2"
@@ -167,7 +166,7 @@ func cleanup(ctx context.Context, byoHostContainer *container.CreateResponse, na
 	err := dockerClient.ContainerStop(ctx, byoHostContainer.ID, container.StopOptions{})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = dockerClient.ContainerRemove(ctx, byoHostContainer.ID, dockertypes.ContainerRemoveOptions{})
+	err = dockerClient.ContainerRemove(ctx, byoHostContainer.ID, container.RemoveOptions{})
 	Expect(err).NotTo(HaveOccurred())
 
 	err = k8sClient.Delete(ctx, namespace)

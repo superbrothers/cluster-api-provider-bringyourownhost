@@ -243,8 +243,11 @@ func (m *MachineBuilder) Build() *clusterv1.Machine {
 		},
 		Spec: clusterv1.MachineSpec{
 			ClusterName: m.cluster,
-			Version:     &m.version,
 		},
+	}
+	// The Machine CRD rejects an empty version, so set it only when given.
+	if m.version != "" {
+		machine.Spec.Version = &m.version
 	}
 	if m.bootstrapDataSecret != "" {
 		machine.Spec.Bootstrap = clusterv1.Bootstrap{

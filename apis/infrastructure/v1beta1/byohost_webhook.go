@@ -19,7 +19,7 @@ import (
 // +k8s:deepcopy-gen=false
 // ByoHostValidator validates ByoHosts
 type ByoHostValidator struct {
-	decoder *admission.Decoder
+	decoder admission.Decoder
 }
 
 // NewByoHostValidator returns a ByoHostValidator that decodes the objects in
