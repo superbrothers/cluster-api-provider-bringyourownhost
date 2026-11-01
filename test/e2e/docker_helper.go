@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/system"
 	. "github.com/onsi/gomega" //nolint: stylecheck
+	"github.com/onsi/gomega/gexec"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/cluster-api/test/framework"
@@ -29,7 +30,15 @@ const (
 	kindImage           = "byoh/node:e2e"
 	TempKubeconfigPath  = "/tmp/mgmt.conf"
 	bootstrapKubeconfig = "/tmp/boostrap-kubeconfig"
+	hostAgentPackage    = "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/agent"
 )
+
+// BuildHostAgentBinary builds a statically linked host agent binary, so that
+// it runs inside the BYO host containers regardless of the C library of the
+// machine that builds it.
+func BuildHostAgentBinary() (string, error) {
+	return gexec.BuildWithEnvironment(hostAgentPackage, []string{"CGO_ENABLED=0"})
+}
 
 type cpConfig struct {
 	followLink bool

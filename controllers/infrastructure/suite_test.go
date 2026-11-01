@@ -5,7 +5,6 @@ package controllers_test
 
 import (
 	"context"
-	"go/build"
 	"path/filepath"
 	"testing"
 
@@ -24,6 +23,7 @@ import (
 	infrastructurev1beta1 "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	controllers "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/controllers/infrastructure"
 	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/builder"
+	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/utils/crds"
 
 	//+kubebuilder:scaffold:imports
 
@@ -77,16 +77,19 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+	capiCoreCRDs, err := crds.ClusterAPICoreDir()
+	Expect(err).NotTo(HaveOccurred())
+	capiKubeadmBootstrapCRDs, err := crds.ClusterAPIKubeadmBootstrapDir()
+	Expect(err).NotTo(HaveOccurred())
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
-			filepath.Join(build.Default.GOPATH, "pkg", "mod", "sigs.k8s.io", "cluster-api@v1.4.4", "config", "crd", "bases"),
-			filepath.Join(build.Default.GOPATH, "pkg", "mod", "sigs.k8s.io", "cluster-api@v1.4.4", "bootstrap", "kubeadm", "config", "crd", "bases"),
+			capiCoreCRDs,
+			capiKubeadmBootstrapCRDs,
 		},
 		ErrorIfCRDPathMissing: true,
 	}
 
-	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())

@@ -30,6 +30,11 @@ BIN_DIR := bin
 TOOLS_BIN_DIR := $(TOOLS_DIR)/$(BIN_DIR)
 GINKGO := $(TOOLS_BIN_DIR)/ginkgo
 GINKGO_PKG := github.com/onsi/ginkgo/v2/ginkgo
+SETUP_ENVTEST_VER := v0.25.2
+SETUP_ENVTEST := $(TOOLS_BIN_DIR)/setup-envtest
+# Kubernetes version of the control plane binaries that envtest runs.
+ENVTEST_K8S_VERSION ?= 1.25.0
+ENVTEST_ASSETS = KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use -p path --bin-dir $(TOOLS_BIN_DIR) $(ENVTEST_K8S_VERSION))"
 
 BYOH_TEMPLATES := $(REPO_ROOT)/test/e2e/data/infrastructure-provider-byoh
 
@@ -129,17 +134,17 @@ cluster-templates-v1beta1: kustomize ## Generate cluster templates for v1beta1
 # Run tests
 test: $(GINKGO) generate fmt vet manifests test-coverage ## Run unit tests
 
-test-coverage: prepare-byoh-docker-host-image ## Run test-coverage
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all -r --cover --coverprofile=cover.out --output-dir=. --skip-package=test .
+test-coverage: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run test-coverage
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r --cover --coverprofile=cover.out --output-dir=. --skip-package=test .
 
-agent-test: prepare-byoh-docker-host-image ## Run agent tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all -r $(HOST_AGENT_DIR) --coverprofile cover.out
+agent-test: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run agent tests
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r $(HOST_AGENT_DIR) --coverprofile cover.out
 
-controller-test: ## Run controller tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all controllers/infrastructure --coverprofile cover.out --vv
+controller-test: $(GINKGO) $(SETUP_ENVTEST) ## Run controller tests
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all controllers/infrastructure --coverprofile cover.out --vv
 
-webhook-test: ## Run webhook tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
+webhook-test: $(GINKGO) $(SETUP_ENVTEST) ## Run webhook tests
+	$(ENVTEST_ASSETS) $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
 
 test-e2e: take-user-input docker-build prepare-byoh-docker-host-image $(GINKGO) cluster-templates-e2e ## Run the end-to-end tests
 	$(GINKGO) -v -trace -tags=e2e -focus="$(GINKGO_FOCUS)" $(_SKIP_ARGS) -nodes=$(GINKGO_NODES) --noColor=$(GINKGO_NOCOLOR) $(GINKGO_ARGS) test/e2e -- \
@@ -182,6 +187,9 @@ take-user-input:
 
 $(GINKGO): # Build ginkgo from tools folder.
 	cd $(TOOLS_DIR); GOBIN=$(TOOLS_BIN_DIR) go install $(GINKGO_PKG)
+
+$(SETUP_ENVTEST): # Build setup-envtest, which downloads the envtest binaries.
+	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(SETUP_ENVTEST_VER)
 
 ##@ Deployment
 
