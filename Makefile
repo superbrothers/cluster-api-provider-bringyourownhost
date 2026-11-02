@@ -109,6 +109,14 @@ lint: golangci-lint ## Run golangci-lint.
 golangci-lint: ## Download golangci-lint locally if necessary.
 	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VER))
 
+update-containerd-service: ## Update the systemd unit of containerd in the installer to the one of its default version.
+	hack/update-containerd-service.sh
+
+# CI runs this target, so that the default version of containerd does not
+# change without its systemd unit.
+verify-containerd-service: update-containerd-service ## Verify that the systemd unit of containerd in the installer is the one of its default version.
+	git diff --exit-code -- installer/internal/algo/containerd.service
+
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.

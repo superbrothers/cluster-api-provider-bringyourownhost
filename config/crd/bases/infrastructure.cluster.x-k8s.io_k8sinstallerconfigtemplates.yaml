@@ -44,15 +44,41 @@ spec:
                     spec:
                       description: Spec is the specification of the desired behavior of the installer config.
                       properties:
-                        bundleRepo:
-                          description: BundleRepo is the OCI registry from which the carvel imgpkg bundle will be downloaded
+                        containerdReleaseURL:
+                          description: |-
+                            ContainerdReleaseURL is the base URL of the containerd releases. A
+                            mirror must have the same layout as the releases on GitHub. Defaults to
+                            https://github.com/containerd/containerd/releases/download.
+                          pattern: ^https?://[^\s'"]+$
                           type: string
-                        bundleType:
-                          description: BundleType is the type of bundle (e.g. k8s) that needs to be downloaded
+                        containerdVersion:
+                          description: |-
+                            ContainerdVersion is the version of containerd to install, such as
+                            "2.3.7". It must be 2.0.0 or later. Defaults to the version that the
+                            installer is tested with.
+                          pattern: ^\d+\.\d+\.\d+$
                           type: string
-                      required:
-                        - bundleRepo
-                        - bundleType
+                        kubernetesRepository:
+                          description: |-
+                            KubernetesRepository is the base URL of the apt repositories of the
+                            Kubernetes packages. The installer adds "/v<major>.<minor>/deb/" to it,
+                            so a mirror must have the same layout as pkgs.k8s.io. Defaults to
+                            https://pkgs.k8s.io/core:/stable:.
+                          pattern: ^https?://[^\s'"]+$
+                          type: string
+                        runcReleaseURL:
+                          description: |-
+                            RuncReleaseURL is the base URL of the runc releases. A mirror must have
+                            the same layout as the releases on GitHub. Defaults to
+                            https://github.com/opencontainers/runc/releases/download.
+                          pattern: ^https?://[^\s'"]+$
+                          type: string
+                        runcVersion:
+                          description: |-
+                            RuncVersion is the version of runc to install, such as "1.5.2".
+                            Defaults to the version that the installer is tested with.
+                          pattern: ^\d+\.\d+\.\d+$
+                          type: string
                       type: object
                   required:
                     - spec
