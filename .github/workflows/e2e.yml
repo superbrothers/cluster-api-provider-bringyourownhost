@@ -1,7 +1,7 @@
 name: e2e-suite
 
-# The e2e tests depend on bundles in a registry that no longer exists, so they
-# run only on demand until they are reworked.
+# The e2e tests have not been reworked yet, so they run only on demand until
+# they are.
 on:
   workflow_dispatch:
 

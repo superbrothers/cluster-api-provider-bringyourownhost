@@ -17,8 +17,6 @@ box "VM/Baremetal Host"
     participant hostagent as hagent <<(H,#ADD1B2) >>
 end box 
 
-database "OCI Registry\n(Harbor)" as oci  
-
 == Register BYO Host ==
 user -> hagent: Download hostagent binary
 user --> hagent: ./byoh-agent --kubeconfig config
@@ -53,7 +51,6 @@ note right of hagent
       c. Spec.BootstrapSecret
 end note
 
-oci -> hagent: Download BYOH Imgpkg bundle
 hagent -> hagent: Node Bootstrap
 note right of hagent
     1. Install k8s components

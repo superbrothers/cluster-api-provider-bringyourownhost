@@ -164,7 +164,6 @@ export KUBERNETES_VERSION="v1.22.3"
 export CONTROL_PLANE_MACHINE_COUNT=1
 export WORKER_MACHINE_COUNT=1
 export CONTROL_PLANE_ENDPOINT_IP=<static IP from the subnet where the containers are running>
-export BUNDLE_LOOKUP_TAG=<bundle tag>
 ```
 
 From ```cluster-api-provider-bringyourownhost``` folder
@@ -211,45 +210,7 @@ kind delete cluster
 ```
 
 # Host Agent Installer
-The installer is responsible for detecting the BYOH OS, downloading a BYOH bundle and installing/uninstalling it.
-
-## Supported OS and Kubernetes
-The current list of supported tuples of OS, kubernetes Version, BYOH Bundle Name can be retrieved with:
-```shell
-./cli --list-supported
-```
-An example output looks like:
-
-The corresponding bundles (particular to a patch version) should be pushed to the OCI registry of choice
-By default, BYOH uses projects.registry.vmware.com
-
-Note: It may happen that a specific patch version of a k8s minor release is not available in the OCI registry
-
-<table>
-    <tr>
-        <td>OS</td>
-        <td>K8S Version</td>
-        <td>BYOH Bundle Name</td>
-    </tr>
-    <tr>
-        <td>Ubuntu_20.04.*_x86-64</td>
-        <td>v1.24.*</td>
-        <td>byoh-bundle-ubuntu_20.04.1_x86-64_k8s:v1.24.*</td>
-    </tr>
-    <tr>
-        <td>Ubuntu_20.04.*_x86-64</td>
-        <td>v1.25.*</td>
-        <td>byoh-bundle-ubuntu_20.04.1_x86-64_k8s:v1.25.*</td>
-    </tr>
-        <tr>
-        <td>Ubuntu_20.04.*_x86-64</td>
-        <td>v1.26.*</td>
-        <td>byoh-bundle-ubuntu_20.04.1_x86-64_k8s:v1.26.*</td>
-    </tr>
-</table>
-The '*' in OS means that all Ubuntu 20.04 patches will be handled by this BYOH bundle.
-
-The '*' in the K8S Version means that the k8s minor release is supported but it may happen that a byoh bundle for a specific patch may not exist n the OCI registry,
+The installer provides the scripts that install and uninstall the Kubernetes components on the hosts. See [installer](./installer.md) for the supported OSes and how it works.
 
 ## Pre-requisites
 As of writing this, the following packages must be pre-installed on the BYOH host:
@@ -259,48 +220,4 @@ As of writing this, the following packages must be pre-installed on the BYOH hos
 - conntrack
 ```shell
 sudo apt-get install socat ebtables ethtool conntrack
-```
-
-## Creating a BYOH Bundle
-### Kubernetes Ingredients
-Optional. This step describes downloading kubernetes host components for Debian.
-```shell
-# Build docker image
-(cd installer/bundle_builder/ingredients/deb/ && docker build -t byoh-ingredients-deb .)
-
-# Create a directory for the ingredients and download to it
-(mkdir -p byoh-ingredients-download && docker run --rm -v `pwd`/byoh-ingredients-download:/ingredients byoh-ingredients-deb)
-```
-### Custom Ingredients
-This step describes providing custom kubernetes host components. They can be copied to `byoh-ingredients-download`. Files must match the following globs:
-```shell
-*containerd*.tar
-*kubeadm*.deb
-*kubelet*.deb
-*kubectl*.deb
-*cri-tools*.deb
-*kubernetes-cni*.deb
-```
-
-## Building a BYOH Bundle
-```shell
-#Build docker image
-(cd installer/bundle_builder/ && docker build -t byoh-build-push-bundle .)
-```
-
-```shell
-# Build a BYOH bundle and publish it to an OCI-compliant repo
-docker run --rm -v `pwd`/byoh-ingredients-download:/ingredients --env BUILD_ONLY=0 byoh-build-push-bundle <REPO>/<BYOH Bundle name>
-```
-
-The specified above BYOH Bundle name must match one of the [Supported OS and kubernetes BYOH bundle names](#supported-os-and-kubernetes)
-
-```shell
-# You can also build a tarball of the bundle without publishing. This will create a bundler.tar in the current directory and can be used for custom pushing
-docker run --rm -v `pwd`/byoh-ingredients-download:/ingredients -v`pwd`:/bundle --env BUILD_ONLY=1 byoh-build-push-bundle
-```
-
-```shell
-# Optionally, additional configuration can be included in the bundle by mounting a local path under /config of the container. It will be placed on top of any drop-in configuration created by the packages and tars in the bundle
-docker run --rm -v `pwd`/byoh-ingredients-download:/ingredients -v`pwd`:/bundle -v`pwd`/installer/bundle_builder/config/ubuntu/20_04/k8s/1_22 --env BUILD_ONLY=1 build-push-bundle
 ```

@@ -111,10 +111,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	byoCluster = builder.ByoCluster(defaultNamespace, defaultClusterName).
-		WithBundleBaseRegistry("projects.registry.vmware.com/cluster_api_provider_bringyourownhost").
-		WithBundleTag("1.0").
-		Build()
+	byoCluster = builder.ByoCluster(defaultNamespace, defaultClusterName).Build()
 	Expect(k8sManager.GetClient().Create(context.Background(), byoCluster)).Should(Succeed())
 
 	capiCluster = builder.Cluster(defaultNamespace, defaultClusterName).WithInfrastructureRef(byoCluster).Build()

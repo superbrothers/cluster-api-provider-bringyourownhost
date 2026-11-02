@@ -149,11 +149,9 @@ type MachineBuilder struct {
 
 // ByoClusterBuilder holds the variables and objects required to build an infrastructurev1beta1.ByoCluster
 type ByoClusterBuilder struct {
-	namespace      string
-	name           string
-	bundleRegistry string
-	bundleTag      string
-	cluster        *clusterv1.Cluster
+	namespace string
+	name      string
+	cluster   *clusterv1.Cluster
 }
 
 // ByoCluster returns a ByoClusterBuilder with the given name and namespace
@@ -167,18 +165,6 @@ func ByoCluster(namespace, name string) *ByoClusterBuilder {
 // WithOwnerCluster adds the passed Owner Cluster to the ByoClusterBuilder
 func (c *ByoClusterBuilder) WithOwnerCluster(cluster *clusterv1.Cluster) *ByoClusterBuilder {
 	c.cluster = cluster
-	return c
-}
-
-// WithBundleBaseRegistry adds the passed registry value to the ByoClusterBuilder
-func (c *ByoClusterBuilder) WithBundleBaseRegistry(registry string) *ByoClusterBuilder {
-	c.bundleRegistry = registry
-	return c
-}
-
-// WithBundleTag adds the passed bundleTag value to the ByoClusterBuilder
-func (c *ByoClusterBuilder) WithBundleTag(tag string) *ByoClusterBuilder {
-	c.bundleTag = tag
 	return c
 }
 
@@ -205,10 +191,6 @@ func (c *ByoClusterBuilder) Build() *infrastructurev1beta1.ByoCluster {
 				UID:        c.cluster.UID,
 			},
 		}
-	}
-
-	if c.bundleRegistry != "" {
-		cluster.Spec.BundleLookupBaseRegistry = c.bundleRegistry
 	}
 
 	return cluster

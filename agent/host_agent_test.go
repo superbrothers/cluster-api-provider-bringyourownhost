@@ -83,7 +83,6 @@ var _ = Describe("Agent", func() {
 			}
 			Expect(k8sClient.Create(context.TODO(), byoHost)).NotTo(HaveOccurred())
 
-			runner.CommandArgs["--downloadpath"] = fakeDownloadPath
 			output, _, err := runner.ExecByoDockerHost(byoHostContainer)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -114,7 +113,6 @@ var _ = Describe("Agent", func() {
 			ns               *corev1.Namespace
 			ctx              context.Context
 			hostName         string
-			fakeDownloadPath = "fake-download-path"
 			runner           *e2e.ByoHostRunner
 			byoHostContainer *container.CreateResponse
 			output           dockertypes.HijackedResponse
@@ -130,7 +128,6 @@ var _ = Describe("Agent", func() {
 
 			runner = setupTestInfra(ctx, hostName, getKubeConfig().Name(), ns)
 			runner.CommandArgs["--label"] = "site=apac"
-			runner.CommandArgs["--downloadpath"] = fakeDownloadPath
 
 			byoHostContainer, err = runner.SetupByoDockerHost()
 			Expect(err).NotTo(HaveOccurred())
@@ -293,7 +290,6 @@ var _ = Describe("Agent", func() {
 				}
 				byoHost.Annotations = map[string]string{}
 				byoHost.Annotations[infrastructurev1beta1.K8sVersionAnnotation] = K8sVersion
-				byoHost.Annotations[infrastructurev1beta1.BundleLookupBaseRegistryAnnotation] = bundleLookupBaseRegistry
 
 				fakeBootstrapSecret := builder.Secret(ns.Name, fakeBootstrapSecret).Build()
 				err := k8sClient.Create(ctx, fakeBootstrapSecret)
@@ -457,7 +453,6 @@ var _ = Describe("Agent", func() {
 			ctx              context.Context
 			err              error
 			hostName         string
-			fakeDownloadPath = "fake-download-path"
 			runner           *e2e.ByoHostRunner
 			byoHostContainer *container.CreateResponse
 		)
@@ -481,7 +476,6 @@ var _ = Describe("Agent", func() {
 		})
 
 		It("should skip installation of k8s components", func() {
-			runner.CommandArgs["--downloadpath"] = fakeDownloadPath
 			runner.CommandArgs["--skip-installation"] = ""
 			output, _, err := runner.ExecByoDockerHost(byoHostContainer)
 			Expect(err).NotTo(HaveOccurred())

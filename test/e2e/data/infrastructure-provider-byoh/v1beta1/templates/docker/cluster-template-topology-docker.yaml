@@ -19,8 +19,6 @@ spec:
       metadata: {}
       replicas: ${CONTROL_PLANE_MACHINE_COUNT}
     variables:
-      - name: bundleLookupBaseRegistry
-        value: "projects.registry.vmware.com/cluster_api_provider_bringyourownhost"
       - name: controlPlaneIpAddr
         value: ${CONTROL_PLANE_ENDPOINT_IP}
       - name: kubeVipPodManifest

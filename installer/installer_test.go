@@ -103,11 +103,4 @@ var _ = Describe("Byohost Installer Tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(i.Install()).To(ContainSubstring("ExecStart=/usr/local/bin/containerd\n"))
 	})
-
-	It("does not leave template actions in the scripts, which the host agent parses again", func() {
-		i, err := installer.NewInstaller("Ubuntu 26.04.1 LTS", "amd64", "v1.36.6", nil)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(i.Install()).NotTo(ContainSubstring("{{"))
-		Expect(i.Uninstall()).NotTo(ContainSubstring("{{"))
-	})
 })

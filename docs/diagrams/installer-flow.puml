@@ -23,9 +23,6 @@ box "VM/Baremetal Host"
     participant hostagent as hagent <<(H,#ADD1B2) >>
 end box 
 
-
-database "OCI Registry\n(Harbor)" as oci  
-
 == Register BYO Host ==
 user --> hagent: ./byoh-agent --kubeconfig config
 hagent -> byoh: register <i>ByoHost</i> CRD
@@ -40,7 +37,7 @@ note right of installer
     If InstallationSecretNotAvailableReason for
         BYOHostReady Condiiton
     - Get OS, ARCH, k8sVersion from ByoMachine
-    - Get BundleRepo, BundleType from InstallerConfig
+    - Get the versions and the URLs to download from InstallerConfig
 end note
 installer -> secret: Create <i>InstallationSecret</i>
 installer -> installerconfig: Patch with <i>InstallationSecret</i> and status.ready
@@ -56,6 +53,6 @@ bmc -> byoh: Patch <i>InstallationSecret</i>
 note right of hagent
     If Byohost.spec.InstallationSecret is available
 end note    
-hagent -> hagent: Decode, Parse & Execute installation script
+hagent -> hagent: Decode & Execute installation script
 
 @enduml

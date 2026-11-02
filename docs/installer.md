@@ -65,8 +65,7 @@ If someone wants to implement their own installer controller then they need to f
   - If it does not exist, generate installation/uninstallation data using `ByoMachine.status.hostinfo` details and create the Secret with the following data:
     - _`install`_ (string): contains installation bash script
     - _`uninstall`_ (string): contains uninstallation bash script
-  - Variables: need to keep these variables in the scripts to parse by the `byoh agent`.
-    - _`{{.BundleDownloadPath}}`_: path on host where bundle will be downloaded by `byoh agent`
+  - The `byoh agent` runs the scripts with bash as they are.
 - Set `status.installationSecret` to the generated secret object reference
 - Set `status.ready = true`
 - Patch the resource to persist changes

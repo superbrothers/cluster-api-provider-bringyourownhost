@@ -20,11 +20,6 @@ type ByoClusterSpec struct {
 	// ControlPlaneEndpoint represents the endpoint used to communicate with the control plane.
 	// +optional
 	ControlPlaneEndpoint APIEndpoint `json:"controlPlaneEndpoint"`
-
-	// BundleLookupBaseRegistry is the base Registry URL that is used for pulling byoh bundle images,
-	// if not set, the default will be set to https://projects.registry.vmware.com/cluster_api_provider_bringyourownhost
-	// +optional
-	BundleLookupBaseRegistry string `json:"bundleLookupBaseRegistry,omitempty"`
 }
 
 // ByoClusterStatus defines the observed state of ByoCluster
