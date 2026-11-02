@@ -18,6 +18,7 @@ type K8sInstallerConfigTemplateStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // K8sInstallerConfigTemplate is the Schema for the k8sinstallerconfigtemplates API
 type K8sInstallerConfigTemplate struct {
