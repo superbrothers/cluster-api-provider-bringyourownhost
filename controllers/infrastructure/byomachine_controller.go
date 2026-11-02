@@ -48,11 +48,19 @@ const (
 	ProviderIDPrefix = "byoh://"
 	// ProviderIDSuffixLength length of provider id suffix
 	ProviderIDSuffixLength = 6
-	// RequeueForbyohost requeue delay for byoh host
-	RequeueForbyohost = 10 * time.Second
-	// RequeueInstallerConfigTime requeue delay for installer config
-	RequeueInstallerConfigTime = 10 * time.Second
+	// DefaultRequeuePeriod is the default interval to check again while a
+	// controller waits for a resource, such as a free ByoHost.
+	DefaultRequeuePeriod = 10 * time.Second
 )
+
+// requeuePeriodOrDefault returns the requeue period, or DefaultRequeuePeriod
+// when it is not set.
+func requeuePeriodOrDefault(period time.Duration) time.Duration {
+	if period <= 0 {
+		return DefaultRequeuePeriod
+	}
+	return period
+}
 
 // ByoMachineReconciler reconciles a ByoMachine object
 type ByoMachineReconciler struct {
@@ -60,6 +68,10 @@ type ByoMachineReconciler struct {
 	Scheme       *runtime.Scheme
 	ClusterCache clustercache.ClusterCache
 	Recorder     events.EventRecorder
+	// RequeuePeriod is the interval to check again while the ByoMachine waits
+	// for a free ByoHost or for the installer config. DefaultRequeuePeriod is
+	// used when it is not set.
+	RequeuePeriod time.Duration
 }
 
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines,verbs=get;list;watch;create;update;patch;delete
@@ -456,7 +468,7 @@ func (r *ByoMachineReconciler) setInstallationSecretForByoHost(ctx context.Conte
 	}
 	if !ready {
 		logger.Info("Installer config is not ready, requeuing")
-		return ctrl.Result{RequeueAfter: RequeueInstallerConfigTime}, nil
+		return ctrl.Result{RequeueAfter: requeuePeriodOrDefault(r.RequeuePeriod)}, nil
 	}
 
 	helper, err := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
@@ -525,7 +537,7 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 		// Requeue without an error: controller-runtime ignores RequeueAfter
 		// with an error, and backs off up to about 16 minutes. The ByoHost
 		// events do not trigger this ByoMachine while it has no ByoHost.
-		return ctrl.Result{RequeueAfter: RequeueForbyohost}, nil
+		return ctrl.Result{RequeueAfter: requeuePeriodOrDefault(r.RequeuePeriod)}, nil
 	}
 	// TODO- Needs smarter logic
 	host := hostsList.Items[0]

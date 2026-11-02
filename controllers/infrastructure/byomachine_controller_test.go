@@ -163,7 +163,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			It("should mark BYOHostReady as False", func() {
 				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -187,7 +187,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			It("should attach a ByoHost that is registered while it waits", func() {
 				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 
 				byoHost = builder.ByoHost(defaultNamespace, "host-registered-while-waiting").Build()
 				Expect(k8sClientUncached.Create(ctx, byoHost)).Should(Succeed())
@@ -471,7 +471,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					It("should requeue the request if installer config is not ready", func() {
 						res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 						Expect(err).NotTo(HaveOccurred())
-						Expect(res.RequeueAfter).To(Equal(controllers.RequeueInstallerConfigTime))
+						Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 					})
 
 					It("should patch byohost if installer config is ready", func() {
@@ -655,7 +655,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			It("should mark BYOHostReady as False when BYOHosts is available but label mismatch", func() {
 				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -694,7 +694,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			It("should mark BYOHostReady as False", func() {
 				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -835,7 +835,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 
 				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
 
 				createdK8sInstallerConfig := &infrastructurev1beta1.K8sInstallerConfig{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdK8sInstallerConfig)

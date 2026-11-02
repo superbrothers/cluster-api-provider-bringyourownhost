@@ -41,6 +41,10 @@ var (
 type ByoClusterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// RequeuePeriod is the interval to check again while the ByoCluster waits
+	// for its ByoMachines to be deleted. DefaultRequeuePeriod is used when it
+	// is not set.
+	RequeuePeriod time.Duration
 }
 
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byoclusters,verbs=get;list;watch;create;update;patch;delete
@@ -160,7 +164,7 @@ func (r ByoClusterReconciler) reconcileDelete(ctx context.Context, byoCluster *i
 
 	if len(byoMachines) > 0 {
 		logger.Info("Waiting for ByoMachines to be deleted", "count", len(byoMachines))
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: requeuePeriodOrDefault(r.RequeuePeriod)}, nil
 	}
 	// Cluster is deleted so remove the finalizer.
 	controllerutil.RemoveFinalizer(byoCluster, infrav1.ClusterFinalizer)
