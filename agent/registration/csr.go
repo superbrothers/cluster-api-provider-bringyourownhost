@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	infrastructurev1beta1 "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	certv1 "k8s.io/api/certificates/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
@@ -118,7 +119,7 @@ func (bcsr *ByohCSR) RequestBYOHClientCert(hostname string) (string, types.UID, 
 	}
 	certTimeToExpire := bcsr.expiryDuration
 	bcsr.logger.Info("certTimeToExpire", "duration", certTimeToExpire)
-	reqName, reqUID, err := csr.RequestCertificate(bcsr.bootstrapClient,
+	reqName, reqUID, err := csr.RequestCertificateWithContext(context.Background(), bcsr.bootstrapClient,
 		csrData,
 		fmt.Sprintf(ByohCSRNameFormat, hostname),
 		certv1.KubeAPIServerClientSignerName,
@@ -182,24 +183,24 @@ func writeKubeconfigFromBootstrapping(bootstrapClientConfig *restclient.Config, 
 	// Build resulting kubeconfig.
 	kubeconfigData := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
-		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+		Clusters: map[string]*clientcmdapi.Cluster{infrastructurev1beta1.DefaultClusterName: {
 			Server:                   bootstrapClientConfig.Host,
 			InsecureSkipTLSVerify:    bootstrapClientConfig.Insecure,
 			CertificateAuthority:     caFile,
 			CertificateAuthorityData: caData,
 		}},
 		// Define auth based on the obtained client cert.
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{infrastructurev1beta1.DefaultAuth: {
 			ClientCertificateData: certData,
 			ClientKeyData:         keyData,
 		}},
 		// Define a context that connects the auth info and cluster, and set it as the default
-		Contexts: map[string]*clientcmdapi.Context{"default-context": {
-			Cluster:   "default-cluster",
-			AuthInfo:  "default-auth",
+		Contexts: map[string]*clientcmdapi.Context{infrastructurev1beta1.DefaultContext: {
+			Cluster:   infrastructurev1beta1.DefaultClusterName,
+			AuthInfo:  infrastructurev1beta1.DefaultAuth,
 			Namespace: "default",
 		}},
-		CurrentContext: "default-context",
+		CurrentContext: infrastructurev1beta1.DefaultContext,
 	}
 
 	// Marshal to disk

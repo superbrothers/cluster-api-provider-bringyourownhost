@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/test/framework/clusterctl"
 	"sigs.k8s.io/cluster-api/util"
@@ -114,15 +114,15 @@ var _ = Describe("When testing MachineDeployment scale out/in", func() {
 				Namespace:                namespace.Name,
 				ClusterName:              clusterName,
 				KubernetesVersion:        e2eConfig.MustGetVariable(KubernetesVersion),
-				ControlPlaneMachineCount: pointer.Int64(3),
-				WorkerMachineCount:       pointer.Int64(1),
+				ControlPlaneMachineCount: ptr.To[int64](3),
+				WorkerMachineCount:       ptr.To[int64](1),
 			},
 			WaitForClusterIntervals:      e2eConfig.GetIntervals(specName, "wait-cluster"),
 			WaitForControlPlaneIntervals: e2eConfig.GetIntervals(specName, "wait-control-plane"),
 			WaitForMachineDeployments:    e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		}, clusterResources)
 
-		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(pointer.Int32(1)))
+		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(ptr.To[int32](1)))
 
 		By("Scaling the MachineDeployment out to 3")
 		framework.ScaleAndWaitMachineDeployment(ctx, framework.ScaleAndWaitMachineDeploymentInput{
@@ -133,7 +133,7 @@ var _ = Describe("When testing MachineDeployment scale out/in", func() {
 			WaitForMachineDeployments: e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		})
 
-		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(pointer.Int32(3)))
+		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(ptr.To[int32](3)))
 
 		By("Scaling the MachineDeployment down to 2")
 		framework.ScaleAndWaitMachineDeployment(ctx, framework.ScaleAndWaitMachineDeploymentInput{
@@ -144,7 +144,7 @@ var _ = Describe("When testing MachineDeployment scale out/in", func() {
 			WaitForMachineDeployments: e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		})
 
-		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(pointer.Int32(2)))
+		Expect(clusterResources.MachineDeployments[0].Spec.Replicas).To(Equal(ptr.To[int32](2)))
 
 	})
 

@@ -60,7 +60,7 @@ func (v *ByoHostValidator) handleCreateUpdate(req *admission.Request) admission.
 		return admission.Allowed("")
 	}
 	substrs := strings.Split(userName, ":")
-	if len(substrs) < 2 { //nolint: gomnd
+	if len(substrs) < 2 { //nolint:mnd
 		return admission.Denied(fmt.Sprintf("%s is not a valid agent username", userName))
 	}
 	if !strings.Contains(byoHost.Name, substrs[2]) {

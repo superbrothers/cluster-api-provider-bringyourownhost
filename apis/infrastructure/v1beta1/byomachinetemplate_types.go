@@ -47,5 +47,5 @@ type ByoMachineTemplateResource struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ByoMachineTemplate{}, &ByoMachineTemplateList{})
+	objectTypes = append(objectTypes, &ByoMachineTemplate{}, &ByoMachineTemplateList{})
 }

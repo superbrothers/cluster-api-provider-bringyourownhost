@@ -91,7 +91,7 @@ type ByoMachineList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ByoMachine{}, &ByoMachineList{})
+	objectTypes = append(objectTypes, &ByoMachine{}, &ByoMachineList{})
 }
 
 // GetConditions returns the conditions of ByoMachine status

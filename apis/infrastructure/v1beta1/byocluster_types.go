@@ -82,5 +82,5 @@ type ByoClusterList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ByoCluster{}, &ByoClusterList{})
+	objectTypes = append(objectTypes, &ByoCluster{}, &ByoClusterList{})
 }

@@ -6,6 +6,7 @@
 package crds
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +38,7 @@ func ClusterAPIKubeadmBootstrapDir() (string, error) {
 // moduleDir returns the local directory of a module in the build list of the
 // main module, downloading it if necessary.
 func moduleDir(module string) (string, error) {
-	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", module).Output()
+	out, err := exec.CommandContext(context.Background(), "go", "list", "-m", "-f", "{{.Dir}}", module).Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to locate module %s: %w", module, err)
 	}

@@ -17,9 +17,9 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/system"
-	. "github.com/onsi/gomega" //nolint: stylecheck
+	"github.com/moby/go-archive"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"github.com/onsi/gomega/gexec"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/clientcmd"
@@ -32,6 +32,11 @@ const (
 	bootstrapKubeconfig = "/tmp/boostrap-kubeconfig"
 	hostAgentPackage    = "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/agent"
 )
+
+// shellCommand returns the command that runs the given shell script.
+func shellCommand(script string) []string {
+	return []string{"sh", "-c", script}
+}
 
 // BuildHostAgentBinary builds a statically linked host agent binary, so that
 // it runs inside the BYO host containers regardless of the C library of the
@@ -198,7 +203,7 @@ func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt container.ListOp
 
 		re := regexp.MustCompile("server:.*")
 		kubeconfig = re.ReplaceAll(kubeconfig, []byte("server: https://127.0.0.1:"+r.Port))
-		Expect(os.WriteFile(TempKubeconfigPath, kubeconfig, 0644)).NotTo(HaveOccurred()) //nolint: gosec,gomnd
+		Expect(os.WriteFile(TempKubeconfigPath, kubeconfig, 0644)).NotTo(HaveOccurred()) //nolint:gosec,mnd
 
 		// If the --bootstrap-kubeconfig is not provided, the tests will use
 		// kubeconfig placed in ~/.byoh/config
@@ -208,7 +213,7 @@ func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt container.ListOp
 				AttachStdin:  false,
 				AttachStdout: true,
 				AttachStderr: true,
-				Cmd:          []string{"sh", "-c", "echo ${HOME}"},
+				Cmd:          shellCommand("echo ${HOME}"),
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 			resp, err := r.DockerClient.ContainerExecAttach(r.Context, execCommand.ID, container.ExecStartOptions{})
@@ -222,7 +227,7 @@ func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt container.ListOp
 				AttachStdin:  false,
 				AttachStdout: true,
 				AttachStderr: true,
-				Cmd:          []string{"sh", "-c", "mkdir ${HOME}/.byoh"},
+				Cmd:          shellCommand("mkdir ${HOME}/.byoh"),
 			})
 			Expect(err).ShouldNot(HaveOccurred())
 			err = r.DockerClient.ContainerExecStart(r.Context, execCommand.ID, container.ExecStartOptions{})
@@ -230,7 +235,7 @@ func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt container.ListOp
 
 			config.sourcePath = TempKubeconfigPath
 			// SplitAfterN used to remove the unwanted special characters in the homeDir
-			config.destPath = strings.SplitAfterN(strings.TrimSpace(homeDir)+"/.byoh/config", "/", 2)[1] //nolint: gomnd
+			config.destPath = strings.SplitAfterN(strings.TrimSpace(homeDir)+"/.byoh/config", "/", 2)[1] //nolint:mnd
 		} else {
 			config.sourcePath = TempKubeconfigPath
 			config.destPath = r.CommandArgs["--bootstrap-kubeconfig"]

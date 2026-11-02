@@ -37,7 +37,7 @@ type ByoClusterTemplateList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ByoClusterTemplate{}, &ByoClusterTemplateList{})
+	objectTypes = append(objectTypes, &ByoClusterTemplate{}, &ByoClusterTemplateList{})
 }
 
 // ByoClusterTemplateResource describes the data needed to create a ByoCluster from a template.

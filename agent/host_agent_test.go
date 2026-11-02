@@ -31,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/klog/v2/klogr"
+	klog "k8s.io/klog/v2"
 	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
 	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 )
@@ -99,7 +99,7 @@ var _ = Describe("Agent", func() {
 				_, err := os.Stat(agentLogFile)
 				if err == nil {
 					data, err := os.ReadFile(agentLogFile)
-					if err == nil && strings.Contains(string(data), "\"msg\"=\"error\"") {
+					if err == nil && strings.Contains(string(data), "\"error\"") {
 						return true
 					}
 				}
@@ -498,7 +498,7 @@ var _ = Describe("Agent", func() {
 				_, err := os.Stat(agentLogFile)
 				if err == nil {
 					data, err := os.ReadFile(agentLogFile)
-					if err == nil && strings.Contains(string(data), "\"msg\"=\"skip-installation flag set, skipping installer initialisation\"") {
+					if err == nil && strings.Contains(string(data), "\"skip-installation flag set, skipping installer initialisation\"") {
 						return true
 					}
 				}
@@ -567,7 +567,7 @@ var _ = Describe("Agent", func() {
 				_, err := os.Stat(agentLogFile)
 				if err == nil {
 					data, err := os.ReadFile(agentLogFile)
-					if err == nil && strings.Contains(string(data), "\"msg\"=\"initiated bootstrap kubeconfig flow\"") {
+					if err == nil && strings.Contains(string(data), "\"initiated bootstrap kubeconfig flow\"") {
 						return true
 					}
 				}
@@ -614,7 +614,7 @@ var _ = Describe("Agent", func() {
 				_, err := os.Stat(agentLogFile)
 				if err == nil {
 					data, err := os.ReadFile(agentLogFile)
-					if err == nil && strings.Contains(string(data), "\"msg\"=\"initiated bootstrap kubeconfig flow\"") {
+					if err == nil && strings.Contains(string(data), "\"initiated bootstrap kubeconfig flow\"") {
 						return false
 					}
 				}
@@ -719,7 +719,7 @@ var _ = Describe("Agent", func() {
 				_, err := os.Stat(agentLogFile)
 				if err == nil {
 					data, err := os.ReadFile(agentLogFile)
-					if err == nil && strings.Contains(string(data), "\"msg\"=\"waiting for client certificate to be issued\"") {
+					if err == nil && strings.Contains(string(data), "\"waiting for client certificate to be issued\"") {
 						return true
 					}
 				}
@@ -829,7 +829,7 @@ var _ = Describe("Agent Unit Tests", func() {
 
 			_, err = bootstrapKubeConf.Write(testbootstrapKubeconfigInvalid)
 			Expect(err).NotTo(HaveOccurred())
-			err = handleBootstrapFlow(klogr.New(), "test-host")
+			err = handleBootstrapFlow(klog.Background(), "test-host")
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("client config load failed"))
 		})
@@ -856,7 +856,7 @@ users:
 `)
 			_, err = bootstrapKubeConf.Write(testbootstrapKubeconfigValid)
 			Expect(err).NotTo(HaveOccurred())
-			err = handleBootstrapFlow(klogr.New(), "")
+			err = handleBootstrapFlow(klog.Background(), "")
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("kubeconfig generation failed: hostname is not valid"))
 		})
@@ -902,7 +902,7 @@ users:
 			var config *restclient.Config
 			config, err = registration.LoadRESTClientConfig(bootstrapKubeConfig)
 			Expect(err).NotTo(HaveOccurred())
-			err = certRotation(klogr.New(), "test-host", config)
+			err = certRotation(klog.Background(), "test-host", config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		It("should return if certificate needs rotation", func() {
@@ -933,7 +933,7 @@ users:
 			var config *restclient.Config
 			config, err = registration.LoadRESTClientConfig(bootstrapKubeConfig)
 			Expect(err).NotTo(HaveOccurred())
-			err = certRotation(klogr.New(), "test-host", config)
+			err = certRotation(klog.Background(), "test-host", config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})

@@ -18,6 +18,15 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
+// Kinds and API versions of the objects that the builders build
+const (
+	kindByoMachine   = "ByoMachine"
+	kindMachine      = "Machine"
+	kindByoCluster   = "ByoCluster"
+	kindCluster      = "Cluster"
+	corev1APIVersion = "v1"
+)
+
 // ByoMachineBuilder holds the variables and objects required to build an infrastructurev1beta1.ByoMachine
 type ByoMachineBuilder struct {
 	namespace    string
@@ -57,7 +66,7 @@ func (b *ByoMachineBuilder) WithLabelSelector(selector map[string]string) *ByoMa
 func (b *ByoMachineBuilder) Build() *infrastructurev1beta1.ByoMachine {
 	byoMachine := &infrastructurev1beta1.ByoMachine{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ByoMachine",
+			Kind:       kindByoMachine,
 			APIVersion: infrastructurev1beta1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -69,7 +78,7 @@ func (b *ByoMachineBuilder) Build() *infrastructurev1beta1.ByoMachine {
 	if b.machine != nil {
 		byoMachine.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
 			{
-				Kind:       "Machine",
+				Kind:       kindMachine,
 				Name:       b.machine.Name,
 				APIVersion: clusterv1.GroupVersion.String(),
 				UID:        b.machine.UID,
@@ -177,7 +186,7 @@ func (c *ByoClusterBuilder) WithBundleTag(tag string) *ByoClusterBuilder {
 func (c *ByoClusterBuilder) Build() *infrastructurev1beta1.ByoCluster {
 	cluster := &infrastructurev1beta1.ByoCluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ByoCluster",
+			Kind:       kindByoCluster,
 			APIVersion: clusterv1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,7 +199,7 @@ func (c *ByoClusterBuilder) Build() *infrastructurev1beta1.ByoCluster {
 	if c.cluster != nil {
 		cluster.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
 			{
-				Kind:       "Cluster",
+				Kind:       kindCluster,
 				Name:       c.cluster.Name,
 				APIVersion: clusterv1.GroupVersion.String(),
 				UID:        c.cluster.UID,
@@ -235,7 +244,7 @@ func (m *MachineBuilder) WithBootstrapDataSecret(secret string) *MachineBuilder 
 func (m *MachineBuilder) Build() *clusterv1.Machine {
 	machine := &clusterv1.Machine{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Machine",
+			Kind:       kindMachine,
 			APIVersion: clusterv1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,7 +257,7 @@ func (m *MachineBuilder) Build() *clusterv1.Machine {
 			// don't resolve it, so it points at a ByoMachine of the same name.
 			InfrastructureRef: clusterv1.ContractVersionedObjectReference{
 				APIGroup: infrastructurev1beta1.GroupVersion.Group,
-				Kind:     "ByoMachine",
+				Kind:     kindByoMachine,
 				Name:     m.name,
 			},
 		},
@@ -305,7 +314,7 @@ func (c *ClusterBuilder) WithInfrastructureRef(byoCluster *infrastructurev1beta1
 func (c *ClusterBuilder) Build() *clusterv1.Cluster {
 	cluster := &clusterv1.Cluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Cluster",
+			Kind:       kindCluster,
 			APIVersion: clusterv1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -321,7 +330,7 @@ func (c *ClusterBuilder) Build() *clusterv1.Cluster {
 	if c.byoCluster != nil {
 		cluster.Spec.InfrastructureRef = clusterv1.ContractVersionedObjectReference{
 			APIGroup: infrastructurev1beta1.GroupVersion.Group,
-			Kind:     "ByoCluster",
+			Kind:     kindByoCluster,
 			Name:     c.byoCluster.Name,
 		}
 	}
@@ -366,7 +375,7 @@ func (s *SecretBuilder) Build() *corev1.Secret {
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
-			APIVersion: "v1",
+			APIVersion: corev1APIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      s.name,
@@ -404,7 +413,7 @@ func (n *NodeBuilder) Build() *corev1.Node {
 	node := &corev1.Node{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Node",
-			APIVersion: "v1",
+			APIVersion: corev1APIVersion,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n.name,
@@ -559,7 +568,7 @@ func (b *K8sInstallerConfigBuilder) Build() *infrastructurev1beta1.K8sInstallerC
 	if b.byomachine != nil {
 		k8sinstallerconfig.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
 			{
-				Kind:       "ByoMachine",
+				Kind:       kindByoMachine,
 				Name:       b.byomachine.Name,
 				APIVersion: infrastructurev1beta1.GroupVersion.String(),
 				UID:        b.byomachine.UID,

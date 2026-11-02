@@ -71,5 +71,5 @@ type BootstrapKubeconfigList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&BootstrapKubeconfig{}, &BootstrapKubeconfigList{})
+	objectTypes = append(objectTypes, &BootstrapKubeconfig{}, &BootstrapKubeconfigList{})
 }

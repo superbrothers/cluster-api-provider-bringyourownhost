@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -54,7 +53,7 @@ func (l *labelFlags) String() string {
 
 // Set implements flag.Value interface
 //
-//nolint:gomnd
+//nolint:mnd
 func (l *labelFlags) Set(value string) error {
 	// account for comma-separated key-value pairs in a single invocation
 	if len(strings.Split(value, ",")) > 1 {
@@ -149,7 +148,7 @@ func main() {
 	_ = clusterv1.AddToScheme(scheme)
 	_ = certv1.AddToScheme(scheme)
 
-	logger := klogr.New()
+	logger := klog.Background()
 	ctrl.SetLogger(logger)
 	hostName, err := os.Hostname()
 	if err != nil {
@@ -215,11 +214,12 @@ func main() {
 		logger.Info("skip-installation flag set, skipping installer initialisation")
 	}
 	hostReconciler := &reconciler.HostReconciler{
-		Client:              k8sClient,
-		CmdRunner:           cloudinit.CmdRunner{},
-		FileWriter:          cloudinit.FileWriter{},
-		TemplateParser:      setupTemplateParser(),
-		Recorder:            mgr.GetEventRecorderFor("hostagent-controller"),
+		Client:         k8sClient,
+		CmdRunner:      cloudinit.CmdRunner{},
+		FileWriter:     cloudinit.FileWriter{},
+		TemplateParser: setupTemplateParser(),
+		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
+		Recorder:            mgr.GetEventRecorderFor("hostagent-controller"), //nolint:staticcheck
 		SkipK8sInstallation: skipInstallation,
 		DownloadPath:        downloadpath,
 	}

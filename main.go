@@ -11,7 +11,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	klog "k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +71,7 @@ func setFlags() {
 // nolint: funlen, gocyclo
 func main() {
 	setFlags()
-	ctrl.SetLogger(klogr.New())
+	ctrl.SetLogger(klog.Background())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -125,7 +124,8 @@ func main() {
 		Client:       mgr.GetClient(),
 		Scheme:       mgr.GetScheme(),
 		ClusterCache: clusterCache,
-		Recorder:     mgr.GetEventRecorderFor("byomachine-controller"),
+		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
+		Recorder: mgr.GetEventRecorderFor("byomachine-controller"), //nolint:staticcheck
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoMachine")
 		os.Exit(1)

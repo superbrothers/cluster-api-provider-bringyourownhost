@@ -614,7 +614,7 @@ func (r *ByoMachineReconciler) markHostForCleanup(ctx context.Context, machineSc
 func (r *ByoMachineReconciler) getInstallerConfig(ctx context.Context, byoMachine *infrav1.ByoMachine) (*unstructured.Unstructured, error) {
 	installerConfig := &unstructured.Unstructured{}
 	gvk := byoMachine.Spec.InstallerRef.GroupVersionKind()
-	gvk.Kind = strings.Replace(gvk.Kind, "Template", "", -1)
+	gvk.Kind = strings.ReplaceAll(gvk.Kind, "Template", "")
 	installerConfig.SetGroupVersionKind(gvk)
 	installerConfigName := client.ObjectKey{
 		Namespace: byoMachine.Namespace,

@@ -57,5 +57,5 @@ type K8sInstallerConfigList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&K8sInstallerConfig{}, &K8sInstallerConfigList{})
+	objectTypes = append(objectTypes, &K8sInstallerConfig{}, &K8sInstallerConfigList{})
 }

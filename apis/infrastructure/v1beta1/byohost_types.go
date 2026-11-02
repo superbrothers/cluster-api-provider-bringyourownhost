@@ -99,7 +99,7 @@ type ByoHostList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ByoHost{}, &ByoHostList{})
+	objectTypes = append(objectTypes, &ByoHost{}, &ByoHostList{})
 }
 
 // GetConditions gets the ByoHost status conditions

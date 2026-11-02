@@ -22,6 +22,13 @@ type ScriptExecutor struct {
 	ParseTemplateExecutor ITemplateParser
 }
 
+// MIME types of the content of the files written by the bootstrap script
+const (
+	mimeTypeBase64    = "application/base64"
+	mimeTypeGzip      = "application/x-gzip"
+	mimeTypePlainText = "text/plain"
+)
+
 type bootstrapConfig struct {
 	FilesToWrite      []Files  `json:"write_files"`
 	CommandsToExecute []string `json:"runCmd"`
@@ -29,7 +36,7 @@ type bootstrapConfig struct {
 
 // Files details required for files written by bootstrap script
 type Files struct {
-	Path        string `json:"path,"`
+	Path        string `json:"path"`
 	Encoding    string `json:"encoding,omitempty"`
 	Owner       string `json:"owner,omitempty"`
 	Permissions string `json:"permissions,omitempty"`
@@ -86,30 +93,30 @@ func parseEncodingScheme(e string) []string {
 
 	switch e {
 	case "gz+base64", "gzip+base64", "gz+b64", "gzip+b64":
-		return []string{"application/base64", "application/x-gzip"}
+		return []string{mimeTypeBase64, mimeTypeGzip}
 	case "base64", "b64":
-		return []string{"application/base64"}
+		return []string{mimeTypeBase64}
 	}
 
-	return []string{"text/plain"}
+	return []string{mimeTypePlainText}
 }
 
 func decodeContent(content string, encodings []string) (string, error) {
 	for _, e := range encodings {
 		switch e {
-		case "application/base64":
+		case mimeTypeBase64:
 			rByte, err := base64.StdEncoding.DecodeString(content)
 			if err != nil {
 				return content, errors.WithStack(err)
 			}
 			content = string(rByte)
-		case "application/x-gzip":
+		case mimeTypeGzip:
 			rByte, err := common.GunzipData([]byte(content))
 			if err != nil {
 				return content, err
 			}
 			content = string(rByte)
-		case "text/plain":
+		case mimeTypePlainText:
 			continue
 		default:
 			return content, errors.Errorf("Unknown bootstrap data encoding: %q", content)
