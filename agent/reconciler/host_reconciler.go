@@ -14,7 +14,7 @@ import (
 	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
@@ -34,7 +34,7 @@ type HostReconciler struct {
 	CmdRunner           cloudinit.ICmdRunner
 	FileWriter          cloudinit.IFileWriter
 	TemplateParser      cloudinit.ITemplateParser
-	Recorder            record.EventRecorder
+	Recorder            events.EventRecorder
 	SkipK8sInstallation bool
 	DownloadPath        string
 }
@@ -104,7 +104,7 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 		bootstrapScript, err := r.getBootstrapScript(ctx, byoHost.Spec.BootstrapSecret.Name, byoHost.Spec.BootstrapSecret.Namespace)
 		if err != nil {
 			logger.Error(err, "error getting bootstrap script")
-			r.Recorder.Eventf(byoHost, corev1.EventTypeWarning, "ReadBootstrapSecretFailed", "bootstrap secret %s not found", byoHost.Spec.BootstrapSecret.Name)
+			r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "ReadBootstrapSecretFailed", "BootstrapK8sNode", "bootstrap secret %s not found", byoHost.Spec.BootstrapSecret.Name)
 			return ctrl.Result{}, err
 		}
 
@@ -120,7 +120,7 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 			if err != nil {
 				return ctrl.Result{}, err
 			}
-			r.Recorder.Event(byoHost, corev1.EventTypeNormal, "InstallScriptExecutionSucceeded", "install script executed")
+			r.Recorder.Eventf(byoHost, nil, corev1.EventTypeNormal, "InstallScriptExecutionSucceeded", "InstallK8sComponents", "install script executed")
 			v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
 		} else {
 			logger.Info("install script already executed")
@@ -129,7 +129,7 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 		err = r.cleank8sdirectories(ctx)
 		if err != nil {
 			logger.Error(err, "error cleaning up k8s directories, please delete it manually for reconcile to proceed.")
-			r.Recorder.Event(byoHost, corev1.EventTypeWarning, "CleanK8sDirectoriesFailed", "clean k8s directories failed")
+			r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "CleanK8sDirectoriesFailed", "BootstrapK8sNode", "clean k8s directories failed")
 			v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CleanK8sDirectoriesFailedReason, clusterv1beta1.ConditionSeverityError, "")
 			return ctrl.Result{}, err
 		}
@@ -137,13 +137,13 @@ func (r *HostReconciler) reconcileNormal(ctx context.Context, byoHost *infrastru
 		err = r.bootstrapK8sNode(ctx, bootstrapScript, byoHost)
 		if err != nil {
 			logger.Error(err, "error in bootstrapping k8s node")
-			r.Recorder.Event(byoHost, corev1.EventTypeWarning, "BootstrapK8sNodeFailed", "k8s Node Bootstrap failed")
+			r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "BootstrapK8sNodeFailed", "BootstrapK8sNode", "k8s Node Bootstrap failed")
 			_ = r.resetNode(ctx, byoHost)
 			v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded, infrastructurev1beta1.CloudInitExecutionFailedReason, clusterv1beta1.ConditionSeverityError, "")
 			return ctrl.Result{}, err
 		}
 		logger.Info("k8s node successfully bootstrapped")
-		r.Recorder.Event(byoHost, corev1.EventTypeNormal, "BootstrapK8sNodeSucceeded", "k8s Node Bootstraped")
+		r.Recorder.Eventf(byoHost, nil, corev1.EventTypeNormal, "BootstrapK8sNodeSucceeded", "BootstrapK8sNode", "k8s Node Bootstraped")
 		v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 	}
 
@@ -156,7 +156,7 @@ func (r *HostReconciler) executeInstallerController(ctx context.Context, byoHost
 	err := r.Client.Get(ctx, types.NamespacedName{Name: byoHost.Spec.InstallationSecret.Name, Namespace: byoHost.Spec.InstallationSecret.Namespace}, secret)
 	if err != nil {
 		logger.Error(err, "error getting install and uninstall script")
-		r.Recorder.Eventf(byoHost, corev1.EventTypeWarning, "ReadInstallationSecretFailed", "install and uninstall script %s not found", byoHost.Spec.InstallationSecret.Name)
+		r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "ReadInstallationSecretFailed", "InstallK8sComponents", "install and uninstall script %s not found", byoHost.Spec.InstallationSecret.Name)
 		return err
 	}
 	installScript := string(secret.Data["install"])
@@ -171,7 +171,7 @@ func (r *HostReconciler) executeInstallerController(ctx context.Context, byoHost
 	err = r.CmdRunner.RunCmd(ctx, installScript)
 	if err != nil {
 		logger.Error(err, "error executing installation script")
-		r.Recorder.Event(byoHost, corev1.EventTypeWarning, "InstallScriptExecutionFailed", "install script execution failed")
+		r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "InstallScriptExecutionFailed", "InstallK8sComponents", "install script execution failed")
 		v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded, infrastructurev1beta1.K8sComponentsInstallationFailedReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return err
 	}
@@ -267,7 +267,7 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 			err = r.CmdRunner.RunCmd(ctx, uninstallScript)
 			if err != nil {
 				logger.Error(err, "error execting Uninstallation script")
-				r.Recorder.Event(byoHost, corev1.EventTypeWarning, "UninstallScriptExecutionFailed", "uninstall script execution failed")
+				r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "UninstallScriptExecutionFailed", "UninstallK8sComponents", "uninstall script execution failed")
 				return err
 			}
 		}
@@ -301,11 +301,11 @@ func (r *HostReconciler) resetNode(ctx context.Context, byoHost *infrastructurev
 
 	err := r.CmdRunner.RunCmd(ctx, KubeadmResetCommand)
 	if err != nil {
-		r.Recorder.Event(byoHost, corev1.EventTypeWarning, "ResetK8sNodeFailed", "k8s Node Reset failed")
+		r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "ResetK8sNodeFailed", "ResetK8sNode", "k8s Node Reset failed")
 		return errors.Wrapf(err, "failed to exec kubeadm reset")
 	}
 	logger.Info("Kubernetes Node reset completed")
-	r.Recorder.Event(byoHost, corev1.EventTypeNormal, "ResetK8sNodeSucceeded", "k8s Node Reset completed")
+	r.Recorder.Eventf(byoHost, nil, corev1.EventTypeNormal, "ResetK8sNodeSucceeded", "ResetK8sNode", "k8s Node Reset completed")
 	return nil
 }
 
