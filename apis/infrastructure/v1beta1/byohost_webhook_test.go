@@ -122,7 +122,20 @@ var _ = Describe("ByohostWebhook", func() {
 		It("should reject the request from an invalid user", func() {
 			err := InvalidUserK8sClient.Create(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("is not a valid agent username"))
+			Expect(err.Error()).To(ContainSubstring("test-user cannot create/update ByoHost host1"))
+		})
+
+		It("should reject the request from the agent of another host whose name is contained", func() {
+			byoHost.Name = "host10"
+			err := ValidUserK8sClient.Create(ctx, byoHost)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("byoh:host:host1 cannot create/update ByoHost host10"))
+		})
+
+		It("should allow the request from an administrator", func() {
+			Expect(k8sClient.Create(ctx, byoHost)).Should(Succeed())
+			// cleanup
+			Expect(k8sClient.Delete(ctx, byoHost)).Should(Succeed())
 		})
 	})
 	Context("When ByoHost gets a update request", func() {
@@ -158,7 +171,11 @@ var _ = Describe("ByohostWebhook", func() {
 		It("should reject the request from an invalid user", func() {
 			err := InvalidUserK8sClient.Update(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("is not a valid agent username"))
+			Expect(err.Error()).To(ContainSubstring("test-user cannot create/update ByoHost host1"))
+		})
+		It("should allow the request from an administrator", func() {
+			byoHost.Labels = map[string]string{"role": "worker"}
+			Expect(k8sClient.Update(ctx, byoHost)).Should(Succeed())
 		})
 		AfterEach(func() {
 			Expect(ValidUserK8sClient.Delete(ctx, byoHost)).Should(Succeed())
