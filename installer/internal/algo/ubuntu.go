@@ -89,9 +89,7 @@ func (u *Ubuntu) Uninstall() string {
 	return u.uninstall
 }
 
-// render executes the script template with text/template. The host agent
-// parses the result as a template again, so the scripts must not contain
-// "{{" other than the actions of this template.
+// render executes the script template with text/template.
 func render(script string, data *scriptData) (string, error) {
 	tmpl, err := template.New("script").Option("missingkey=error").Parse(script)
 	if err != nil {

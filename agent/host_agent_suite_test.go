@@ -39,7 +39,6 @@ var (
 	defaultByoMachineName  = "my-byomachine"
 	agentLogFile           = "/tmp/agent-integration.log"
 	execLogFile            = "/tmp/agent-exec.log"
-	fakeDownloadPath       = "fake-download-path"
 	fakeBootstrapSecret    = "fake-bootstrap-secret"
 	fakeInstallationSecret = "fake-installation-secret"
 	testEnv                *envtest.Environment
@@ -47,8 +46,7 @@ var (
 )
 
 const (
-	bundleLookupBaseRegistry = "projects.registry.vmware.com/cluster_api_provider_bringyourownhost"
-	K8sVersion               = "v1.22.3"
+	K8sVersion = "v1.22.3"
 )
 
 func TestHostAgent(t *testing.T) {

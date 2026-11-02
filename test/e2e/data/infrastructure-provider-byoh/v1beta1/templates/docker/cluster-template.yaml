@@ -165,7 +165,6 @@ kind: ByoCluster
 metadata:
   name: ${CLUSTER_NAME}
 spec:
-  bundleLookupBaseRegistry: projects.registry.vmware.com/cluster_api_provider_bringyourownhost
   controlPlaneEndpoint:
     host: ${CONTROL_PLANE_ENDPOINT_IP}
     port: 6443

@@ -92,7 +92,6 @@ func setupflags() {
 	flag.Int64Var(&certExpiryDuration, "certExpiryDuration", registration.ExpirationSeconds, "Duration (in seconds) for the expiration of the host certificates")
 	flag.Var(&labels, "label", "labels to attach to the ByoHost CR in the form labelname=labelVal for e.g. '--label site=apac --label cores=2'")
 	flag.StringVar(&metricsbindaddress, "metricsbindaddress", ":8080", "metricsbindaddress is the TCP address that the controller should bind to for serving prometheus metrics.It can be set to \"0\" to disable the metrics serving")
-	flag.StringVar(&downloadpath, "downloadpath", "/var/lib/byoh/bundles", "File System path to keep the downloads")
 	flag.BoolVar(&skipInstallation, "skip-installation", false, "If you want to skip installation of the kubernetes component binaries")
 	flag.BoolVar(&printVersion, "version", false, "Print the version of the agent")
 	flag.StringVar(&bootstrapKubeConfig, "bootstrap-kubeconfig", "", "Provide bootstrap kubeconfig for bootstrap token workflow")
@@ -126,7 +125,6 @@ var (
 	scheme              *runtime.Scheme
 	labels              = make(labelFlags)
 	metricsbindaddress  string
-	downloadpath        string
 	skipInstallation    bool
 	printVersion        bool
 	bootstrapKubeConfig string
@@ -220,7 +218,6 @@ func main() {
 		TemplateParser:      setupTemplateParser(),
 		Recorder:            mgr.GetEventRecorder("hostagent-controller"),
 		SkipK8sInstallation: skipInstallation,
-		DownloadPath:        downloadpath,
 	}
 	if err = hostReconciler.SetupWithManager(context.TODO(), mgr); err != nil {
 		logger.Error(err, "unable to create controller")

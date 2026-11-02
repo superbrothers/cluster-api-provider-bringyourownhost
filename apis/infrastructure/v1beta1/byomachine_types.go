@@ -24,7 +24,7 @@ type ByoMachineSpec struct {
 	ProviderID string `json:"providerID,omitempty"`
 
 	// InstallerRef is an optional reference to a installer-specific resource that holds
-	// the details of InstallationSecret to be used to install BYOH Bundle.
+	// the details of InstallationSecret to be used to install the Kubernetes components.
 	// +optional
 	InstallerRef *corev1.ObjectReference `json:"installerRef,omitempty"`
 }

@@ -171,8 +171,7 @@ runCmd:
 					}
 
 					byoHost.Annotations = map[string]string{
-						infrastructurev1beta1.K8sVersionAnnotation:               "1.22",
-						infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
+						infrastructurev1beta1.K8sVersionAnnotation: "1.22",
 					}
 
 					Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
@@ -245,9 +244,12 @@ runCmd:
 				})
 
 				Context("When installation secret is ready", func() {
+					var installScript string
+
 					BeforeEach(func() {
-						installScript := `echo "install"`
-						uninstallScript = `echo "uninstall"`
+						// The scripts contain "{{" to check that they are run as they are.
+						installScript = `echo "{{install}}"`
+						uninstallScript = `echo "{{uninstall}}"`
 
 						installationSecret = builder.Secret(ns, "test-secret3").
 							WithKeyData("install", installScript).
@@ -262,8 +264,7 @@ runCmd:
 						}
 
 						byoHost.Annotations = map[string]string{
-							infrastructurev1beta1.K8sVersionAnnotation:               "1.22",
-							infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
+							infrastructurev1beta1.K8sVersionAnnotation: "1.22",
 						}
 
 						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
@@ -397,6 +398,16 @@ runCmd:
 
 					})
 
+					It("should execute the install script as it is", func() {
+						_, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
+							NamespacedName: byoHostLookupKey,
+						})
+						Expect(reconcilerErr).ToNot(HaveOccurred())
+
+						_, installCommand := fakeCommandRunner.RunCmdArgsForCall(0)
+						Expect(installCommand).To(Equal(installScript))
+					})
+
 					It("should set uninstall script in byohost spec", func() {
 						result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 							NamespacedName: byoHostLookupKey,
@@ -481,7 +492,8 @@ runCmd:
 
 		Context("When the ByoHost is marked for cleanup", func() {
 			BeforeEach(func() {
-				uninstallScript = `echo "uninstall success script"`
+				// The script contains "{{" to check that it is run as it is.
+				uninstallScript = `echo "{{uninstall success script}}"`
 				byoMachine = builder.ByoMachine(ns, "test-byomachine").Build()
 				Expect(k8sClient.Create(ctx, byoMachine)).NotTo(HaveOccurred(), "failed to create byomachine")
 				byoHost.Status.MachineRef = &corev1.ObjectReference{
@@ -493,9 +505,8 @@ runCmd:
 				}
 				byoHost.Labels = map[string]string{clusterv1.ClusterNameLabel: "test-cluster"}
 				byoHost.Annotations = map[string]string{
-					infrastructurev1beta1.HostCleanupAnnotation:              "",
-					infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
-					infrastructurev1beta1.K8sVersionAnnotation:               "1.22",
+					infrastructurev1beta1.HostCleanupAnnotation: "",
+					infrastructurev1beta1.K8sVersionAnnotation:  "1.22",
 				}
 				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
@@ -535,6 +546,8 @@ runCmd:
 				Expect(fakeCommandRunner.RunCmdCallCount()).To(Equal(2))
 				_, resetCommand := fakeCommandRunner.RunCmdArgsForCall(0)
 				Expect(resetCommand).To(Equal(reconciler.KubeadmResetCommand))
+				_, uninstallCommand := fakeCommandRunner.RunCmdArgsForCall(1)
+				Expect(uninstallCommand).To(Equal(uninstallScript))
 				updatedByoHost := &infrastructurev1beta1.ByoHost{}
 				err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 				Expect(err).ToNot(HaveOccurred())
@@ -544,7 +557,6 @@ runCmd:
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.HostCleanupAnnotation))
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.EndPointIPAnnotation))
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.K8sVersionAnnotation))
-				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.BundleLookupBaseRegistryAnnotation))
 
 				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 				Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{

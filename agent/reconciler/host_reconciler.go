@@ -36,7 +36,6 @@ type HostReconciler struct {
 	TemplateParser      cloudinit.ITemplateParser
 	Recorder            events.EventRecorder
 	SkipK8sInstallation bool
-	DownloadPath        string
 }
 
 const (
@@ -163,10 +162,6 @@ func (r *HostReconciler) executeInstallerController(ctx context.Context, byoHost
 	uninstallScript := string(secret.Data["uninstall"])
 
 	byoHost.Spec.UninstallationScript = &uninstallScript
-	installScript, err = r.parseScript(ctx, installScript)
-	if err != nil {
-		return err
-	}
 	logger.Info("executing install script")
 	err = r.CmdRunner.RunCmd(ctx, installScript)
 	if err != nil {
@@ -191,18 +186,6 @@ func (r *HostReconciler) getBootstrapScript(ctx context.Context, dataSecretName,
 
 	bootstrapSecret := string(secret.Data["value"])
 	return bootstrapSecret, nil
-}
-
-func (r *HostReconciler) parseScript(ctx context.Context, script string) (string, error) {
-	data, err := cloudinit.TemplateParser{
-		Template: map[string]string{
-			"BundleDownloadPath": r.DownloadPath,
-		},
-	}.ParseTemplate(script)
-	if err != nil {
-		return "", fmt.Errorf("unable to apply install parsed template to the data object")
-	}
-	return data, nil
 }
 
 // SetupWithManager sets up the controller with the manager
@@ -258,13 +241,7 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 				return fmt.Errorf("UninstallationScript not found in Byohost %s", byoHost.Name)
 			}
 			logger.Info("Executing Uninstall script")
-			uninstallScript := *byoHost.Spec.UninstallationScript
-			uninstallScript, err = r.parseScript(ctx, uninstallScript)
-			if err != nil {
-				logger.Error(err, "error parsing Uninstallation script")
-				return err
-			}
-			err = r.CmdRunner.RunCmd(ctx, uninstallScript)
+			err = r.CmdRunner.RunCmd(ctx, *byoHost.Spec.UninstallationScript)
 			if err != nil {
 				logger.Error(err, "error execting Uninstallation script")
 				r.Recorder.Eventf(byoHost, nil, corev1.EventTypeWarning, "UninstallScriptExecutionFailed", "UninstallK8sComponents", "uninstall script execution failed")
@@ -368,7 +345,4 @@ func (r *HostReconciler) removeAnnotations(ctx context.Context, byoHost *infrast
 
 	// Remove the cluster version annotation
 	delete(byoHost.Annotations, infrastructurev1beta1.K8sVersionAnnotation)
-
-	// Remove the bundle registry annotation
-	delete(byoHost.Annotations, infrastructurev1beta1.BundleLookupBaseRegistryAnnotation)
 }

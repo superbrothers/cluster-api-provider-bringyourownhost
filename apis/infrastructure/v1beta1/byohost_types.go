@@ -18,8 +18,6 @@ const (
 	K8sVersionAnnotation = "byoh.infrastructure.cluster.x-k8s.io/k8sversion"
 	// AttachedByoMachineLabel label used to mark a node name attached to a byo host
 	AttachedByoMachineLabel = "byoh.infrastructure.cluster.x-k8s.io/byomachine-name"
-	// BundleLookupBaseRegistryAnnotation annotation used to store the base registry for the bundle lookup
-	BundleLookupBaseRegistryAnnotation = "byoh.infrastructure.cluster.x-k8s.io/bundle-registry"
 )
 
 // ByoHostSpec defines the desired state of ByoHost
