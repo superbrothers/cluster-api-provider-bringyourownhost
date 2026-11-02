@@ -1,15 +1,9 @@
 name: e2e-suite
 
+# The e2e tests depend on bundles in a registry that no longer exists, so they
+# run only on demand until they are reworked.
 on:
-  pull_request:
-    branches: [ main ]
-    paths-ignore:
-      - '*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - 'NOTICE'
-      - 'PROJECT'
-      - 'SECURITY_CONTACTS'
+  workflow_dispatch:
 
 jobs:
   e2e-pr-blocking:
