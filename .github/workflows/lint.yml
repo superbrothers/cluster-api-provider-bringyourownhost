@@ -22,12 +22,5 @@ jobs:
       with:
         go-version-file: go.mod
 
-    # The Makefile pins the version of golangci-lint for local runs too.
-    - name: Get the golangci-lint version
-      id: golangci-lint-version
-      run: echo "version=$(sed -n 's/^GOLANGCI_LINT_VER := //p' Makefile)" >> "$GITHUB_OUTPUT"
-
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v9
-      with:
-        version: ${{ steps.golangci-lint-version.outputs.version }}
+      run: make lint
