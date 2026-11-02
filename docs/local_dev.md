@@ -28,7 +28,7 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  image: kindest/node:v1.22.0
+  image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
 EOF
 
 kind create cluster --config kind-cluster.yaml
@@ -48,7 +48,7 @@ __Clone CAPI Repo__
 ```shell
 git clone git@github.com:kubernetes-sigs/cluster-api.git
 cd cluster-api
-git checkout v1.0.0 
+git checkout v1.14.3
 ```
 
 __Create a tilt-settings.json file__
