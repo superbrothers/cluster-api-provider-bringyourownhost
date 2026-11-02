@@ -104,6 +104,7 @@ vet: ## Run go vet against code.
 GOLANGCI_LINT_VER := v2.12.2
 GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint-$(GOLANGCI_LINT_VER)
 lint: golangci-lint ## Run golangci-lint.
+	$(GOLANGCI_LINT) config verify
 	$(GOLANGCI_LINT) run
 golangci-lint: ## Download golangci-lint locally if necessary.
 	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VER))
