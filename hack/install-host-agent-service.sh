@@ -29,8 +29,10 @@ Description=host-agent service
 After=network.target
 [Service]
 Type=simple
-WorkingDirectory="$BIN_DIRECTORY"
+WorkingDirectory=$BIN_DIRECTORY
 ExecStart="$BIN"
+Restart=always
+RestartSec=10s
 User=root
 Group=root
 [Install]
