@@ -39,12 +39,13 @@ import (
 )
 
 var (
-	scheme               = runtime.NewScheme()
-	setupLog             = ctrl.Log.WithName("setup")
-	enableLeaderElection bool
-	probeAddr            string
-	requeuePeriod        time.Duration
-	managerOptions       = flags.ManagerOptions{}
+	scheme                = runtime.NewScheme()
+	setupLog              = ctrl.Log.WithName("setup")
+	enableLeaderElection  bool
+	probeAddr             string
+	requeuePeriod         time.Duration
+	byoMachineConcurrency int
+	managerOptions        = flags.ManagerOptions{}
 )
 
 // The metrics server authenticates and authorizes the requests to the diagnostics endpoint.
@@ -73,6 +74,8 @@ func setFlags() {
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	fs.DurationVar(&requeuePeriod, "requeue-period", byohcontrollers.DefaultRequeuePeriod,
 		"The interval to check again while a controller waits, such as while a ByoMachine waits for a free ByoHost.")
+	fs.IntVar(&byoMachineConcurrency, "byomachine-concurrency", 1,
+		"Number of ByoMachines to process simultaneously")
 	flags.AddManagerOptions(fs, &managerOptions)
 	pflag.Parse()
 }
@@ -88,6 +91,10 @@ func main() {
 
 	if requeuePeriod <= 0 {
 		setupLog.Error(fmt.Errorf("--requeue-period must be positive, got %s", requeuePeriod), "invalid flag")
+		os.Exit(1)
+	}
+	if byoMachineConcurrency < 1 {
+		setupLog.Error(fmt.Errorf("--byomachine-concurrency must be 1 or more, got %d", byoMachineConcurrency), "invalid flag")
 		os.Exit(1)
 	}
 
@@ -148,11 +155,12 @@ func main() {
 	}
 
 	if err = (&byohcontrollers.ByoMachineReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		ClusterCache:  clusterCache,
-		Recorder:      mgr.GetEventRecorder("byomachine-controller"),
-		RequeuePeriod: requeuePeriod,
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		ClusterCache:            clusterCache,
+		Recorder:                mgr.GetEventRecorder("byomachine-controller"),
+		RequeuePeriod:           requeuePeriod,
+		MaxConcurrentReconciles: byoMachineConcurrency,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoMachine")
 		os.Exit(1)

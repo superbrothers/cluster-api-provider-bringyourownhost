@@ -28,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -77,6 +78,10 @@ type ByoMachineReconciler struct {
 	// for a free ByoHost or for the installer config. DefaultRequeuePeriod is
 	// used when it is not set.
 	RequeuePeriod time.Duration
+	// MaxConcurrentReconciles is the number of ByoMachines to process
+	// simultaneously. The default of controller-runtime (1) is used when it is
+	// not set.
+	MaxConcurrentReconciles int
 }
 
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines,verbs=get;list;watch;create;update;patch;delete
@@ -345,6 +350,7 @@ func (r *ByoMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(controlledType).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Watches(
 			&infrav1.ByoHost{},
 			handler.EnqueueRequestsFromMapFunc(ByoHostToByoMachineMapFunc(controlledTypeGVK)),
