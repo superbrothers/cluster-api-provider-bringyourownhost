@@ -2,6 +2,8 @@ module github.com/vmware-tanzu/cluster-api-provider-bringyourownhost
 
 go 1.26.0
 
+toolchain go1.26.10
+
 replace github.com/insomniacslk/dhcp => github.com/harvester/dhcp v0.0.0-20220421024905-28b38eafefe3
 
 require (

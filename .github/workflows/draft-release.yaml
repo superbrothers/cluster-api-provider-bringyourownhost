@@ -8,22 +8,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v7
         with:
-          go-version: 1.20.7
+          go-version-file: go.mod
 
       - name: Build Release Artifacts
         run: IMG="projects.registry.vmware.com/cluster_api_provider_bringyourownhost/cluster-api-byoh-controller:${{ github.ref_name }}" make build-release-artifacts
 
       - name: Publish Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true

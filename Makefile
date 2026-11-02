@@ -15,8 +15,9 @@ BYOH_BASE_IMG_DEV = byoh/node:dev
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 
 REPO_ROOT := $(shell pwd)
-# Go version of the container images that build the binaries.
-GO_VERSION ?= 1.26.10
+# Go version of the container images that build the binaries, taken from the
+# toolchain directive in go.mod.
+GO_VERSION ?= $(shell sed -n 's/^toolchain go//p' go.mod)
 GINKGO_FOCUS  ?=
 GINKGO_SKIP ?=
 GINKGO_NODES  ?= 1
@@ -116,7 +117,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
