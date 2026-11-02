@@ -5,12 +5,12 @@ This document describes how to release the Cluster API BYOH infrastructure provi
 ### Follow the below steps to make a new release in BYOH
 1. Open a PR to update `cluster-api-provider-bringyourownhost/metadata.yaml` file if a new major/minor version is being released. This is not needed in case of patch release. Map the newly added version to supported Cluster API contract version.
 
-2. Create a new git tag from the main branch of the upstream git repo(vmware-tanzu/cluster-api-provider-bringyourownhost). For example - `git tag v0.3.0`. We follow semantic versioning for releases, see https://semver.org.
+2. Create a new git tag from the main branch of the upstream git repo(superbrothers/cluster-api-provider-bringyourownhost). For example - `git tag v0.3.0`. We follow semantic versioning for releases, see https://semver.org.
 
-3. Push the git tag to upstream repo(vmware-tanzu/cluster-api-provider-bringyourownhost) repository
+3. Push the git tag to upstream repo(superbrothers/cluster-api-provider-bringyourownhost) repository
 `git push v0.3.0`
 
-4. This will trigger a new Github Actions workflow called [draft-release](https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/actions/workflows/draft-release.yaml). Wait for the workflow to finish. This workflow will create a draft release having the contributions, changes and assets. Verify the assets, they should contain BYOH agent, cluster templates and infrastructure components.
+4. This will trigger a new Github Actions workflow called [draft-release](https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/draft-release.yaml). Wait for the workflow to finish. This workflow will create a draft release having the contributions, changes and assets. Verify the assets, they should contain BYOH agent, cluster templates and infrastructure components.
 
 5. Next step is to release `BYOH` controller OCI image.  Create controller image in local using below make target
 ```shell
