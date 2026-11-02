@@ -30,7 +30,7 @@ const (
 	kindImage           = "byoh/node:e2e"
 	TempKubeconfigPath  = "/tmp/mgmt.conf"
 	bootstrapKubeconfig = "/tmp/boostrap-kubeconfig"
-	hostAgentPackage    = "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/agent"
+	hostAgentPackage    = "github.com/superbrothers/cluster-api-provider-bringyourownhost/agent"
 )
 
 // shellCommand returns the command that runs the given shell script.
