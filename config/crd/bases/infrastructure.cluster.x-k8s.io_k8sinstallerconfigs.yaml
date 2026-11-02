@@ -14,7 +14,11 @@ spec:
     singular: k8sinstallerconfig
   scope: Namespaced
   versions:
-    - name: v1beta1
+    - additionalPrinterColumns:
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1beta1
       schema:
         openAPIV3Schema:
           description: K8sInstallerConfig is the Schema for the k8sinstallerconfigs API

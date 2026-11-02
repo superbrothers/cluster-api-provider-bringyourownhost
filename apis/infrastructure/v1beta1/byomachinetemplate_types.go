@@ -21,6 +21,7 @@ type ByoMachineTemplateStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ByoMachineTemplate is the Schema for the byomachinetemplates API
 type ByoMachineTemplate struct {

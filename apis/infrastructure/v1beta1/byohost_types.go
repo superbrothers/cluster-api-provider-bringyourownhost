@@ -77,6 +77,7 @@ type ByoHostStatus struct {
 //+kubebuilder:printcolumn:name="OSName",type="string",JSONPath=`.status.hostinfo.osname`
 //+kubebuilder:printcolumn:name="OSImage",type="string",JSONPath=`.status.hostinfo.osimage`
 //+kubebuilder:printcolumn:name="Arch",type="string",JSONPath=`.status.hostinfo.architecture`
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ByoHost is the Schema for the byohosts API
 type ByoHost struct {
