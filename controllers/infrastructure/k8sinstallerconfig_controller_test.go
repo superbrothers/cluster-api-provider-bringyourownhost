@@ -80,7 +80,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 
 		byoMachineLookupKey = types.NamespacedName{Name: byoMachine.Name, Namespace: byoMachine.Namespace}
 		k8sInstallerConfigLookupKey = types.NamespacedName{Name: k8sinstallerConfig.Name, Namespace: k8sinstallerConfig.Namespace}
-		installerSecretLookupKey = types.NamespacedName{Name: k8sinstallerConfig.Name, Namespace: k8sinstallerConfig.Namespace}
+		installerSecretLookupKey = types.NamespacedName{Name: k8sinstallerConfig.Name + "-installation", Namespace: k8sinstallerConfig.Namespace}
 	})
 
 	AfterEach(func() {
@@ -298,7 +298,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			Expect(string(createdSecret.Data["install"])).To(ContainSubstring("KUBERNETES_REPOSITORY='https://mirror.example.com/kubernetes/v1.36/deb/'"))
 		})
 
-		It("should create secret of same name as of K8sInstallerConfig", func() {
+		It("should create secret of the name of K8sInstallerConfig with the suffix -installation", func() {
 			_, err := k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      k8sinstallerConfig.Name,
@@ -308,6 +308,62 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			createdSecret := &corev1.Secret{}
 			err = k8sClientUncached.Get(ctx, installerSecretLookupKey, createdSecret)
 			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// The bootstrap data secret of the Machine has the name of the Machine,
+		// which is also the name of K8sInstallerConfig.
+		It("should not change the secret of the same name as K8sInstallerConfig", func() {
+			bootstrapDataSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      k8sinstallerConfig.Name,
+					Namespace: k8sinstallerConfig.Namespace,
+				},
+				Data: map[string][]byte{
+					"value":  []byte("bootstrap data"),
+					"format": []byte("cloud-config"),
+				},
+				Type: clusterv1.ClusterSecretType,
+			}
+			Expect(k8sClientUncached.Create(ctx, bootstrapDataSecret)).To(Succeed())
+
+			_, err := k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      k8sinstallerConfig.Name,
+					Namespace: k8sinstallerConfig.Namespace}})
+			Expect(err).NotTo(HaveOccurred())
+
+			unchangedSecret := &corev1.Secret{}
+			Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(bootstrapDataSecret), unchangedSecret)).To(Succeed())
+			Expect(unchangedSecret.Data).To(Equal(bootstrapDataSecret.Data))
+
+			createdSecret := &corev1.Secret{}
+			Expect(k8sClientUncached.Get(ctx, installerSecretLookupKey, createdSecret)).To(Succeed())
+			Expect(createdSecret.Data).To(HaveKey("install"))
+		})
+
+		It("should not overwrite the installation secret that K8sInstallerConfig does not control", func() {
+			otherSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      installerSecretLookupKey.Name,
+					Namespace: installerSecretLookupKey.Namespace,
+				},
+				Data: map[string][]byte{
+					"other": []byte("data"),
+				},
+				Type: clusterv1.ClusterSecretType,
+			}
+			Expect(k8sClientUncached.Create(ctx, otherSecret)).To(Succeed())
+			WaitForObjectsToBePopulatedInCache(otherSecret)
+
+			_, err := k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      k8sinstallerConfig.Name,
+					Namespace: k8sinstallerConfig.Namespace}})
+			Expect(err).To(MatchError(ContainSubstring("is not controlled by K8sInstallerConfig")))
+
+			unchangedSecret := &corev1.Secret{}
+			Expect(k8sClientUncached.Get(ctx, installerSecretLookupKey, unchangedSecret)).To(Succeed())
+			Expect(unchangedSecret.Data).To(Equal(otherSecret.Data))
 		})
 
 		It("should create secret with data fields install and uninstall", func() {
@@ -349,8 +405,8 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 
 			createdSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      k8sinstallerConfig.Name,
-					Namespace: k8sinstallerConfig.Namespace,
+					Name:      installerSecretLookupKey.Name,
+					Namespace: installerSecretLookupKey.Namespace,
 					OwnerReferences: []metav1.OwnerReference{
 						{
 							APIVersion: infrav1.GroupVersion.String(),
@@ -369,6 +425,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			}
 			err := k8sClientUncached.Create(ctx, createdSecret)
 			Expect(err).NotTo(HaveOccurred())
+			WaitForObjectsToBePopulatedInCache(createdSecret)
 
 			_, err = k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{

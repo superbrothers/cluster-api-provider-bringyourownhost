@@ -170,13 +170,21 @@ func (r *K8sInstallerConfigReconciler) reconcileNormal(ctx context.Context, scop
 
 // storeInstallationData creates a new secret with the install and unstall data passed in as input,
 // sets the reference in the configuration status and ready to true.
+// installationSecretName returns the name of the installation secret of the
+// K8sInstallerConfig. The K8sInstallerConfig has the name of the ByoMachine,
+// which is also the name of the Machine and of the bootstrap data secret of the
+// Machine, so the installation secret needs a name of its own.
+func installationSecretName(config *infrav1.K8sInstallerConfig) string {
+	return config.Name + "-installation"
+}
+
 func (r *K8sInstallerConfigReconciler) storeInstallationData(ctx context.Context, scope *k8sInstallerConfigScope, install, uninstall string) error {
 	logger := scope.Logger
 	logger.Info("creating installation secret")
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      scope.Config.Name,
+			Name:      installationSecretName(scope.Config),
 			Namespace: scope.Config.Namespace,
 			Labels: map[string]string{
 				clusterv1.ClusterNameLabel: scope.Cluster.Name,
@@ -204,7 +212,16 @@ func (r *K8sInstallerConfigReconciler) storeInstallationData(ctx context.Context
 		if !apierrors.IsAlreadyExists(err) {
 			return errors.Wrapf(err, "failed to create installation secret for K8sInstallerConfig %s/%s", scope.Config.Namespace, scope.Config.Name)
 		}
+		existing := &corev1.Secret{}
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(secret), existing); err != nil {
+			return errors.Wrapf(err, "failed to get installation secret for K8sInstallerConfig %s/%s", scope.Config.Namespace, scope.Config.Name)
+		}
+		// Do not overwrite a secret that this K8sInstallerConfig does not own.
+		if !metav1.IsControlledBy(existing, scope.Config) {
+			return errors.Errorf("secret %s/%s already exists and is not controlled by K8sInstallerConfig %s", secret.Namespace, secret.Name, scope.Config.Name)
+		}
 		logger.Info("installation secret for K8sInstallerConfig already exists, updating", "secret", secret.Name, "K8sInstallerConfig", scope.Config.Name)
+		secret.ResourceVersion = existing.ResourceVersion
 		if err := r.Client.Update(ctx, secret); err != nil {
 			return errors.Wrapf(err, "failed to update installation secret for K8sInstallerConfig %s/%s", scope.Config.Namespace, scope.Config.Name)
 		}
