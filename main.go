@@ -141,8 +141,7 @@ func main() {
 		Client:       mgr.GetClient(),
 		Scheme:       mgr.GetScheme(),
 		ClusterCache: clusterCache,
-		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
-		Recorder: mgr.GetEventRecorderFor("byomachine-controller"), //nolint:staticcheck
+		Recorder:     mgr.GetEventRecorder("byomachine-controller"),
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoMachine")
 		os.Exit(1)

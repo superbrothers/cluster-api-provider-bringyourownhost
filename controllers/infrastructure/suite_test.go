@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -46,7 +46,7 @@ var (
 	byoAdmissionReconciler                *controllers.ByoAdmissionReconciler
 	k8sInstallerConfigReconciler          *controllers.K8sInstallerConfigReconciler
 	bootstrapKubeconfigReconciler         *controllers.BootstrapKubeconfigReconciler
-	recorder                              *record.FakeRecorder
+	recorder                              *events.FakeRecorder
 	byoCluster                            *infrastructurev1beta1.ByoCluster
 	capiCluster                           *clusterv1.Cluster
 	defaultClusterName                    = "my-cluster"
@@ -126,7 +126,7 @@ var _ = BeforeSuite(func() {
 		node,
 	).Build()
 
-	recorder = record.NewFakeRecorder(32)
+	recorder = events.NewFakeRecorder(32)
 	reconciler = &controllers.ByoMachineReconciler{
 		Client:       k8sManager.GetClient(),
 		ClusterCache: clustercache.NewFakeClusterCache(clientFake, client.ObjectKey{Name: capiCluster.Name, Namespace: capiCluster.Namespace}),
