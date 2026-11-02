@@ -22,6 +22,11 @@ spec:
   workers:
     machineDeployments:
       - class: quickstart-docker-worker
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
         template:
           bootstrap:
             ref:
@@ -39,12 +44,22 @@ spec:
       schema:
         openAPIV3Schema:
           type: string
-    - name: kubeVipPodManifest
-      required: true
+    - name: controlPlanePort
+      required: false
       schema:
         openAPIV3Schema:
-          description: kube-vip manifest for the control plane.
-          type: string
+          description: Port of the control plane endpoint.
+          type: integer
+          default: 6443
+    - name: controlPlaneMaxSurge
+      required: false
+      schema:
+        openAPIV3Schema:
+          description: maxSurge of the rollout of the control plane. 0 needs 3 or more control plane machines.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 1
   patches:
     - name: controlPlaneEndpoint
       description: "Sets control plane endpoint"
@@ -60,19 +75,23 @@ spec:
               valueFrom:
                 template: |
                   host: '{{ .controlPlaneIpAddr }}'
-                  port: 6443
-    - name: kubeVipEnabled
+                  port: {{ .controlPlanePort }}
+    - name: controlPlaneRolloutStrategy
+      description: "Sets maxSurge of the rollout of the control plane"
       definitions:
-        - jsonPatches:
-            - op: add
-              path: /spec/template/spec/kubeadmConfigSpec/files/0/content
-              valueFrom:
-                variable: kubeVipPodManifest
-          selector:
+        - selector:
             apiVersion: controlplane.cluster.x-k8s.io/v1beta1
             kind: KubeadmControlPlaneTemplate
             matchResources:
               controlPlane: true
+          jsonPatches:
+            - op: add
+              path: /spec/template/spec/rolloutStrategy
+              valueFrom:
+                template: |
+                  type: RollingUpdate
+                  rollingUpdate:
+                    maxSurge: {{ .controlPlaneMaxSurge }}
 ---
 kind: KubeadmControlPlaneTemplate
 apiVersion: controlplane.cluster.x-k8s.io/v1beta1
@@ -94,9 +113,6 @@ spec:
           controllerManager:
             extraArgs:
               enable-hostpath-provisioner: "true"
-        files:
-          - owner: root:root
-            path: /etc/kubernetes/manifests/kube-vip.yaml
         initConfiguration:
           nodeRegistration:
             criSocket: /var/run/containerd/containerd.sock
@@ -105,7 +121,6 @@ spec:
               - DirAvailable--etc-kubernetes-manifests
               - FileAvailable--etc-kubernetes-kubelet.conf
             kubeletExtraArgs:
-              cgroup-driver: cgroupfs
               eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
         joinConfiguration:
           nodeRegistration:
@@ -115,7 +130,6 @@ spec:
               - DirAvailable--etc-kubernetes-manifests
               - FileAvailable--etc-kubernetes-kubelet.conf
             kubeletExtraArgs:
-              cgroup-driver: cgroupfs
               eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
@@ -125,6 +139,9 @@ metadata:
 spec:
   template:
     spec:
+      selector:
+        matchLabels:
+          role: control-plane
       installerRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: K8sInstallerConfigTemplate
@@ -155,6 +172,9 @@ metadata:
 spec:
   template:
     spec:
+      selector:
+        matchLabels:
+          role: worker
       installerRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: K8sInstallerConfigTemplate
@@ -179,6 +199,5 @@ spec:
       joinConfiguration:
         nodeRegistration:
           kubeletExtraArgs:
-            cgroup-driver: cgroupfs
             eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
 ---

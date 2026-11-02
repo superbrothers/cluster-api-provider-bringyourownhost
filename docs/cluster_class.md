@@ -35,6 +35,11 @@ spec:
   workers:
     machineDeployments:
       - class: quickstart-worker
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
         template:
           bootstrap:
             ref:
@@ -52,12 +57,22 @@ spec:
       schema:
         openAPIV3Schema:
           type: string
-    - name: kubeVipPodManifest
-      required: true
+    - name: controlPlanePort
+      required: false
       schema:
         openAPIV3Schema:
-          description: kube-vip manifest for the control plane.
-          type: string
+          description: Port of the control plane endpoint.
+          type: integer
+          default: 6443
+    - name: controlPlaneMaxSurge
+      required: false
+      schema:
+        openAPIV3Schema:
+          description: maxSurge of the rollout of the control plane. 0 needs 3 or more control plane machines.
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 1
   patches:
     - name: controlPlaneEndpoint
       description: "Sets control plane endpoint"
@@ -73,19 +88,23 @@ spec:
               valueFrom:
                 template: |
                   host: '{{ .controlPlaneIpAddr }}'
-                  port: 6443
-    - name: kubeVipEnabled
+                  port: {{ .controlPlanePort }}
+    - name: controlPlaneRolloutStrategy
+      description: "Sets maxSurge of the rollout of the control plane"
       definitions:
-        - jsonPatches:
-            - op: add
-              path: /spec/template/spec/kubeadmConfigSpec/files/0/content
-              valueFrom:
-                variable: kubeVipPodManifest
-          selector:
+        - selector:
             apiVersion: controlplane.cluster.x-k8s.io/v1beta1
             kind: KubeadmControlPlaneTemplate
             matchResources:
               controlPlane: true
+          jsonPatches:
+            - op: add
+              path: /spec/template/spec/rolloutStrategy
+              valueFrom:
+                template: |
+                  type: RollingUpdate
+                  rollingUpdate:
+                    maxSurge: {{ .controlPlaneMaxSurge }}
 ```
 
 To generate a cluster using this ClusterClass, refer below yaml where we create just one `kind` named `Cluster`
@@ -112,58 +131,10 @@ spec:
     variables:
       - name: controlPlaneIpAddr
         value: ${CONTROL_PLANE_ENDPOINT_IP}
-      - name: kubeVipPodManifest
-        value: |
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            creationTimestamp: null
-            name: kube-vip
-            namespace: kube-system
-          spec:
-            containers:
-            - args:
-              - manager
-              env:
-              - name: cp_enable
-                value: "true"
-              - name: vip_arp
-                value: "true"
-              - name: vip_leaderelection
-                value: "true"
-              - name: vip_address
-                value: ${CONTROL_PLANE_ENDPOINT_IP}
-              - name: vip_interface
-                value: "{{ .DefaultNetworkInterfaceName }}"
-              - name: vip_leaseduration
-                value: "15"
-              - name: vip_renewdeadline
-                value: "10"
-              - name: vip_retryperiod
-                value: "2"
-              image: ghcr.io/kube-vip/kube-vip:v0.5.0
-              imagePullPolicy: IfNotPresent
-              name: kube-vip
-              resources: {}
-              securityContext:
-                capabilities:
-                  add:
-                  - NET_ADMIN
-                  - NET_RAW
-              volumeMounts:
-              - mountPath: /etc/kubernetes/admin.conf
-                name: kubeconfig
-            hostNetwork: true
-            hostAliases:
-              - hostnames:
-                  - kubernetes
-                ip: 127.0.0.1
-            volumes:
-            - hostPath:
-                path: /etc/kubernetes/admin.conf
-                type: FileOrCreate
-              name: kubeconfig
-          status: {}
+      - name: controlPlanePort
+        value: ${CONTROL_PLANE_ENDPOINT_PORT:=6443}
+      - name: controlPlaneMaxSurge
+        value: ${CONTROL_PLANE_MAX_SURGE:=1}
     workers:
       machineDeployments:
         - class: quickstart-worker
@@ -179,6 +150,12 @@ To create a cluster using clusterctl with managed topology, use `topology` flavo
 CLUSTER_NAME
 CONTROL_PLANE_ENDPOINT_IP
 ```
+The following variables are optional:
+- `CONTROL_PLANE_ENDPOINT_PORT`: the port of the control plane endpoint (default `6443`).
+- `CONTROL_PLANE_MAX_SURGE`: `maxSurge` of the rollout of the control plane (default `1`). Set it to `0` to update the control plane without a spare host, which needs 3 or more control plane machines.
+
+The ByoMachineTemplates of the ClusterClass select the hosts by the label `role`: `role=control-plane` for the control plane, and `role=worker` for the workers. Start the agents with `--label role=control-plane` or `--label role=worker`.
+
 Also set feature flag for ClusterClass:
 
 **Feature gate name:** `ClusterTopology`

@@ -7,6 +7,9 @@ metadata:
 spec:
   template:
     spec:
+      selector:
+        matchLabels:
+          role: worker
       installerRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
         kind: K8sInstallerConfigTemplate
@@ -28,6 +31,11 @@ metadata:
 spec:
   clusterName: ${CLUSTER_NAME}
   replicas: ${WORKER_MACHINE_COUNT}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
   template:
