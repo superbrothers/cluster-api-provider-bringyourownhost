@@ -25,7 +25,7 @@ __BYOH__ is a Cluster API Infrastructure Provider for already-provisioned hosts 
 
 - Native Kubernetes manifests and API
 - Support for single and multi-node control plane clusters
-- Support already provisioned Linux VMs with Ubuntu 20.04
+- Support already provisioned Linux hosts with Ubuntu 24.04 and 26.04
 
 ## Getting Started
 Check out the [getting_started](docs/getting_started.md) guide for launching a BYOH workload cluster
@@ -50,11 +50,21 @@ If someone wants to implement their own installer controller then they need to f
 
 - BYOH implements the Cluster API v1beta1 contract, and is built and tested against Cluster API v1.14
 
-## Supported OS and Kubernetes versions
-| Operating System  | Architecture  | Kubernetes v1.24.* | Kubernetes v1.25.* | Kubernetes v1.26.* |
-| ------------------|---------------|:------------------:|:------------------:|:------------------:|
-| Ubuntu 20.04.*    | amd64         |         ✓          |         ✓          |         ✓          |
+## Supported OS and architectures
+| Operating System  | Architecture  |
+| ------------------|---------------|
+| Ubuntu 24.04.*    | amd64, arm64  |
+| Ubuntu 26.04.*    | amd64, arm64  |
 
-**NOTE:**  The '*' in OS means that all Ubuntu 20.04 patches are supported.
+**NOTE:**  The '*' in OS means that all the point releases are supported.
 
-**NOTE:**  The '*' in the K8s version means that the K8s minor release is supported but it may happen that a BYOH bundle for a specific patch may not exist in the OCI registry. 
+## Tested Kubernetes versions
+The default installer installs the version of Kubernetes of the Machine from pkgs.k8s.io (see [installer](./docs/installer.md)). The following minor releases, which the Kubernetes project maintains (https://kubernetes.io/releases/), have been tested.
+
+| Kubernetes | Tested patch release |
+| -----------|----------------------|
+| v1.37      | v1.37.2              |
+| v1.36      | v1.36.6              |
+| v1.35      | v1.35.10             |
+
+**NOTE:**  The tests ran on amd64 hosts of the supported OSes with the default versions of containerd (2.3.7) and runc (1.5.2): the default installer installs the version, `kubeadm init` brings up a control plane, and the uninstall script removes it. arm64 has not been tested yet.

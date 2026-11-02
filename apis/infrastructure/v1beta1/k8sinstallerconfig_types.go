@@ -17,11 +17,40 @@ const (
 
 // K8sInstallerConfigSpec defines the desired state of K8sInstallerConfig
 type K8sInstallerConfigSpec struct {
-	// BundleRepo is the OCI registry from which the carvel imgpkg bundle will be downloaded
-	BundleRepo string `json:"bundleRepo"`
+	// KubernetesRepository is the base URL of the apt repositories of the
+	// Kubernetes packages. The installer adds "/v<major>.<minor>/deb/" to it,
+	// so a mirror must have the same layout as pkgs.k8s.io. Defaults to
+	// https://pkgs.k8s.io/core:/stable:.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s'"]+$`
+	KubernetesRepository string `json:"kubernetesRepository,omitempty"`
 
-	// BundleType is the type of bundle (e.g. k8s) that needs to be downloaded
-	BundleType string `json:"bundleType"`
+	// ContainerdVersion is the version of containerd to install, such as
+	// "2.3.7". It must be 2.0.0 or later. Defaults to the version that the
+	// installer is tested with.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^\d+\.\d+\.\d+$`
+	ContainerdVersion string `json:"containerdVersion,omitempty"`
+
+	// ContainerdReleaseURL is the base URL of the containerd releases. A
+	// mirror must have the same layout as the releases on GitHub. Defaults to
+	// https://github.com/containerd/containerd/releases/download.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s'"]+$`
+	ContainerdReleaseURL string `json:"containerdReleaseURL,omitempty"`
+
+	// RuncVersion is the version of runc to install, such as "1.5.2".
+	// Defaults to the version that the installer is tested with.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^\d+\.\d+\.\d+$`
+	RuncVersion string `json:"runcVersion,omitempty"`
+
+	// RuncReleaseURL is the base URL of the runc releases. A mirror must have
+	// the same layout as the releases on GitHub. Defaults to
+	// https://github.com/opencontainers/runc/releases/download.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s'"]+$`
+	RuncReleaseURL string `json:"runcReleaseURL,omitempty"`
 }
 
 // K8sInstallerConfigStatus defines the observed state of K8sInstallerConfig

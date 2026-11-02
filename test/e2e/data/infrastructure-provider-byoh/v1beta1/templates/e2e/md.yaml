@@ -58,6 +58,4 @@ metadata:
   name: ${CLUSTER_NAME}-md-0
 spec:
   template:
-    spec:
-      bundleRepo: projects.registry.vmware.com/cluster_api_provider_bringyourownhost
-      bundleType: k8s
+    spec: {}

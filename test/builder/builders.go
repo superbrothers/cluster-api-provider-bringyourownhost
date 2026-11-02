@@ -509,8 +509,8 @@ type K8sInstallerConfigBuilder struct {
 	generatedName string
 	clusterLabel  string
 	byomachine    *infrastructurev1beta1.ByoMachine
-	bundleType    string
-	bundleRepo    string
+	k8sVersion    string
+	repository    string
 }
 
 // K8sInstallerConfig returns a K8sInstallerConfigBuilder with the given generated name and namespace
@@ -539,15 +539,15 @@ func (b *K8sInstallerConfigBuilder) WithOwnerByoMachine(byomachine *infrastructu
 	return b
 }
 
-// WithBundleRepo adds the passed bundleRepo to the K8sInstallerConfigBuilder
-func (b *K8sInstallerConfigBuilder) WithBundleRepo(bundleRepo string) *K8sInstallerConfigBuilder {
-	b.bundleRepo = bundleRepo
+// WithK8sVersion adds the k8s version annotation, which the ByoMachine controller sets, to the K8sInstallerConfigBuilder
+func (b *K8sInstallerConfigBuilder) WithK8sVersion(k8sVersion string) *K8sInstallerConfigBuilder {
+	b.k8sVersion = k8sVersion
 	return b
 }
 
-// WithBundleType adds the passed bundleType to the K8sInstallerConfigBuilder
-func (b *K8sInstallerConfigBuilder) WithBundleType(bundleType string) *K8sInstallerConfigBuilder {
-	b.bundleType = bundleType
+// WithKubernetesRepository adds the passed Kubernetes repository to the K8sInstallerConfigBuilder
+func (b *K8sInstallerConfigBuilder) WithKubernetesRepository(repository string) *K8sInstallerConfigBuilder {
+	b.repository = repository
 	return b
 }
 
@@ -580,12 +580,12 @@ func (b *K8sInstallerConfigBuilder) Build() *infrastructurev1beta1.K8sInstallerC
 			clusterv1.ClusterNameLabel: b.clusterLabel,
 		}
 	}
-	if b.bundleRepo != "" {
-		k8sinstallerconfig.Spec.BundleRepo = b.bundleRepo
+	if b.k8sVersion != "" {
+		k8sinstallerconfig.ObjectMeta.Annotations = map[string]string{
+			infrastructurev1beta1.K8sVersionAnnotation: b.k8sVersion,
+		}
 	}
-	if b.bundleType != "" {
-		k8sinstallerconfig.Spec.BundleType = b.bundleType
-	}
+	k8sinstallerconfig.Spec.KubernetesRepository = b.repository
 	return k8sinstallerconfig
 }
 
@@ -593,8 +593,7 @@ func (b *K8sInstallerConfigBuilder) Build() *infrastructurev1beta1.K8sInstallerC
 type K8sInstallerConfigTemplateBuilder struct {
 	namespace     string
 	generatedName string
-	bundleType    string
-	bundleRepo    string
+	repository    string
 }
 
 // K8sInstallerConfigTemplate returns a K8sInstallerConfigTemplateBuilder with the given generated name and namespace
@@ -605,15 +604,9 @@ func K8sInstallerConfigTemplate(namespace, name string) *K8sInstallerConfigTempl
 	}
 }
 
-// WithBundleRepo adds the passed bundleRepo to the K8sInstallerConfigTemplateBuilder
-func (b *K8sInstallerConfigTemplateBuilder) WithBundleRepo(bundleRepo string) *K8sInstallerConfigTemplateBuilder {
-	b.bundleRepo = bundleRepo
-	return b
-}
-
-// WithBundleType adds the passed bundleType to the K8sInstallerConfigTemplateBuilder
-func (b *K8sInstallerConfigTemplateBuilder) WithBundleType(bundleType string) *K8sInstallerConfigTemplateBuilder {
-	b.bundleType = bundleType
+// WithKubernetesRepository adds the passed Kubernetes repository to the K8sInstallerConfigTemplateBuilder
+func (b *K8sInstallerConfigTemplateBuilder) WithKubernetesRepository(repository string) *K8sInstallerConfigTemplateBuilder {
+	b.repository = repository
 	return b
 }
 
@@ -630,12 +623,7 @@ func (b *K8sInstallerConfigTemplateBuilder) Build() *infrastructurev1beta1.K8sIn
 		},
 		Spec: infrastructurev1beta1.K8sInstallerConfigTemplateSpec{},
 	}
-	if b.bundleRepo != "" {
-		k8sinstallerconfigtemplate.Spec.Template.Spec.BundleRepo = b.bundleRepo
-	}
-	if b.bundleType != "" {
-		k8sinstallerconfigtemplate.Spec.Template.Spec.BundleType = b.bundleType
-	}
+	k8sinstallerconfigtemplate.Spec.Template.Spec.KubernetesRepository = b.repository
 	return k8sinstallerconfigtemplate
 }
 

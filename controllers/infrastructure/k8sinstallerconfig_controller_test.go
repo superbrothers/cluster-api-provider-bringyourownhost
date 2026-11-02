@@ -39,8 +39,8 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		k8sInstallerConfigLookupKey types.NamespacedName
 		installerSecretLookupKey    types.NamespacedName
 		testClusterVersion          = "v1.22.1_xyz"
-		testBundleRepo              = "test-repo"
-		testBundleType              = "k8s"
+		testK8sVersion              = "v1.36.6"
+		testKubernetesRepository    = "https://mirror.example.com/kubernetes"
 	)
 
 	BeforeEach(func() {
@@ -64,16 +64,15 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 		Expect(k8sClientUncached.Create(ctx, byoMachine)).Should(Succeed())
 
 		k8sinstallerConfigTemplate = builder.K8sInstallerConfigTemplate(defaultNamespace, defaultK8sInstallerConfigName).
-			WithBundleRepo(testBundleRepo).
-			WithBundleType(testBundleType).
+			WithKubernetesRepository(testKubernetesRepository).
 			Build()
 		Expect(k8sClientUncached.Create(ctx, k8sinstallerConfigTemplate)).Should(Succeed())
 
 		k8sinstallerConfig = builder.K8sInstallerConfig(defaultNamespace, defaultK8sInstallerConfigName).
 			WithClusterLabel(defaultClusterName).
 			WithOwnerByoMachine(byoMachine).
-			WithBundleRepo(testBundleRepo).
-			WithBundleType(testBundleType).
+			WithK8sVersion(testK8sVersion).
+			WithKubernetesRepository(testKubernetesRepository).
 			Build()
 		Expect(k8sClientUncached.Create(ctx, k8sinstallerConfig)).Should(Succeed())
 
@@ -193,7 +192,7 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			byoMachine.Status.HostInfo = infrav1.HostInfo{
 				Architecture: "amd64",
 				OSName:       "linux",
-				OSImage:      "Ubuntu 20.04.1 LTS",
+				OSImage:      "Ubuntu 26.04.1 LTS",
 			}
 			v1beta1conditions.Set(byoMachine, &clusterv1beta1.Condition{
 				Type:   infrav1.BYOHostReady,
@@ -267,6 +266,36 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 					Name:      k8sinstallerConfig.Name,
 					Namespace: k8sinstallerConfig.Namespace}})
 			Expect(err).Should(MatchError("No k8s support for OS"))
+		})
+
+		It("should throw error if k8s version is not in the form of vX.Y.Z", func() {
+			ph, err := v1beta1patch.NewHelper(k8sinstallerConfig, k8sClientUncached)
+			Expect(err).ShouldNot(HaveOccurred())
+			k8sinstallerConfig.Annotations[infrav1.K8sVersionAnnotation] = "v1.36"
+			Expect(ph.Patch(ctx, k8sinstallerConfig, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
+			WaitForObjectToBeUpdatedInCache(k8sinstallerConfig, func(object client.Object) bool {
+				return object.GetAnnotations()[infrav1.K8sVersionAnnotation] == "v1.36"
+			})
+
+			_, err = k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      k8sinstallerConfig.Name,
+					Namespace: k8sinstallerConfig.Namespace}})
+			Expect(err).Should(MatchError("k8s version must be in the form of vX.Y.Z"))
+		})
+
+		It("should create secret with the scripts that install the k8s version from the Kubernetes repository", func() {
+			_, err := k8sInstallerConfigReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      k8sinstallerConfig.Name,
+					Namespace: k8sinstallerConfig.Namespace}})
+			Expect(err).NotTo(HaveOccurred())
+
+			createdSecret := &corev1.Secret{}
+			err = k8sClientUncached.Get(ctx, installerSecretLookupKey, createdSecret)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(string(createdSecret.Data["install"])).To(ContainSubstring("KUBERNETES_VERSION='1.36.6'"))
+			Expect(string(createdSecret.Data["install"])).To(ContainSubstring("KUBERNETES_REPOSITORY='https://mirror.example.com/kubernetes/v1.36/deb/'"))
 		})
 
 		It("should create secret of same name as of K8sInstallerConfig", func() {

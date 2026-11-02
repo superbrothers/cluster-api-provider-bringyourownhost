@@ -68,8 +68,6 @@ var _ = Describe("Controllers/ByomachineController", func() {
 		byoMachineLookupKey = types.NamespacedName{Name: byoMachine.Name, Namespace: byoMachine.Namespace}
 
 		k8sInstallerConfigTemplate = builder.K8sInstallerConfigTemplate(defaultNamespace, defaultK8sInstallerConfigTemplateName).
-			WithBundleRepo("projects.registry.vmware.com/cluster_api_provider_bringyourownhost").
-			WithBundleType("k8s").
 			Build()
 		Expect(k8sClientUncached.Create(ctx, k8sInstallerConfigTemplate)).Should(Succeed())
 		WaitForObjectsToBePopulatedInCache(k8sInstallerConfigTemplate)
@@ -428,8 +426,6 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					BeforeEach(func() {
 						k8sInstallerConfig = builder.K8sInstallerConfig(defaultNamespace, "").
 							WithName(byoMachine.Name).
-							WithBundleRepo("projects.registry.vmware.com/cluster_api_provider_bringyourownhost").
-							WithBundleType("k8s").
 							Build()
 						Expect(k8sClientUncached.Create(ctx, k8sInstallerConfig)).Should(Succeed())
 						WaitForObjectsToBePopulatedInCache(k8sInstallerConfig)
