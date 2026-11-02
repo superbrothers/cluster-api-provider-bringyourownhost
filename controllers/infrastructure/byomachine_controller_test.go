@@ -161,8 +161,9 @@ var _ = Describe("Controllers/ByomachineController", func() {
 
 		Context("When BYO Hosts are not available", func() {
 			It("should mark BYOHostReady as False", func() {
-				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
-				Expect(err).To(MatchError("no hosts found"))
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -183,9 +184,32 @@ var _ = Describe("Controllers/ByomachineController", func() {
 				}))
 			})
 
+			It("should attach a ByoHost that is registered while it waits", func() {
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
+
+				byoHost = builder.ByoHost(defaultNamespace, "host-registered-while-waiting").Build()
+				Expect(k8sClientUncached.Create(ctx, byoHost)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, byoHost)).Should(Succeed())
+				})
+				WaitForObjectsToBePopulatedInCache(byoHost)
+				Expect(clientFake.Create(ctx, builder.Node(defaultNamespace, byoHost.Name).Build())).Should(Succeed())
+
+				res, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(BeZero())
+
+				createdByoHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, types.NamespacedName{Name: byoHost.Name, Namespace: defaultNamespace}, createdByoHost)).Should(Succeed())
+				Expect(createdByoHost.Status.MachineRef).NotTo(BeNil())
+				Expect(createdByoHost.Status.MachineRef.Name).To(Equal(byoMachine.Name))
+			})
+
 			It("should add MachineFinalizer on ByoMachine", func() {
 				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
-				Expect(err).To(HaveOccurred())
+				Expect(err).NotTo(HaveOccurred())
 
 				updatedByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, updatedByoMachine)
@@ -629,8 +653,9 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			})
 
 			It("should mark BYOHostReady as False when BYOHosts is available but label mismatch", func() {
-				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
-				Expect(err).To(MatchError("no hosts found"))
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -667,8 +692,9 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			})
 
 			It("should mark BYOHostReady as False", func() {
-				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
-				Expect(err).To(MatchError("no hosts found"))
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -807,8 +833,9 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					return object.(*infrastructurev1beta1.ByoMachine).Spec.InstallerRef != nil
 				})
 
-				_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
-				Expect(err).Should(MatchError("no hosts found"))
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(controllers.RequeueForbyohost))
 
 				createdK8sInstallerConfig := &infrastructurev1beta1.K8sInstallerConfig{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdK8sInstallerConfig)

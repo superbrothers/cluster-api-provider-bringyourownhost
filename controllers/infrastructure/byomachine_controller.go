@@ -269,7 +269,9 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 	// then pick one from the host capacity pool
 	if machineScope.ByoHost == nil {
 		logger.Info("Attempting host reservation")
-		if res, err := r.attachByoHost(ctx, machineScope); err != nil {
+		res, err := r.attachByoHost(ctx, machineScope)
+		// No ByoHost is attached while it waits for a free one.
+		if err != nil || machineScope.ByoHost == nil {
 			return res, err
 		}
 		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.InstallationSecretNotAvailableReason, clusterv1beta1.ConditionSeverityInfo, "")
@@ -514,13 +516,16 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	err = r.Client.List(ctx, hostsList, &client.ListOptions{LabelSelector: selector})
 	if err != nil {
 		logger.Error(err, "failed to list byohosts")
-		return ctrl.Result{RequeueAfter: RequeueForbyohost}, err
+		return ctrl.Result{}, err
 	}
 	if len(hostsList.Items) == 0 {
 		logger.Info("No hosts found, waiting..")
 		r.Recorder.Eventf(machineScope.ByoMachine, nil, corev1.EventTypeWarning, "ByoHostSelectionFailed", "AttachByoHost", "No available ByoHost")
 		v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.BYOHostsUnavailableReason, clusterv1beta1.ConditionSeverityInfo, "")
-		return ctrl.Result{RequeueAfter: RequeueForbyohost}, errors.New("no hosts found")
+		// Requeue without an error: controller-runtime ignores RequeueAfter
+		// with an error, and backs off up to about 16 minutes. The ByoHost
+		// events do not trigger this ByoMachine while it has no ByoHost.
+		return ctrl.Result{RequeueAfter: RequeueForbyohost}, nil
 	}
 	// TODO- Needs smarter logic
 	host := hostsList.Items[0]
