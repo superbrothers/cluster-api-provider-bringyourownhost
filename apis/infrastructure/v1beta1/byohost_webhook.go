@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
+	"slices"
 
 	v1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,8 +28,15 @@ func NewByoHostValidator(scheme *runtime.Scheme) *ByoHostValidator {
 	return &ByoHostValidator{decoder: admission.NewDecoder(scheme)}
 }
 
-// To allow byoh manager service account to patch ByoHost CR
-const managerServiceAccount = "system:serviceaccount:byoh-system:byoh-controller-manager"
+const (
+	// hostsGroup is the group of the agents. An agent authenticates with the
+	// client certificate that it gets for this group from a CSR
+	// (agent/registration/csr.go).
+	hostsGroup = "byoh:hosts"
+	// hostUsernamePrefix is the prefix of the username of an agent, which is
+	// followed by the name of its host, and so of its ByoHost.
+	hostUsernamePrefix = "byoh:host:"
+)
 
 // Handle handles all the requests for ByoHost resource
 //
@@ -54,17 +61,15 @@ func (v *ByoHostValidator) handleCreateUpdate(req *admission.Request) admission.
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	userName := req.UserInfo.Username
-	// allow manager service account to patch ByoHost
-	if userName == managerServiceAccount && req.Operation == v1.Update {
+	// Leave the requests of the other users, such as the manager, the
+	// administrators and clusterctl, to RBAC.
+	if !slices.Contains(req.UserInfo.Groups, hostsGroup) {
 		return admission.Allowed("")
 	}
-	substrs := strings.Split(userName, ":")
-	if len(substrs) < 2 { //nolint:mnd
-		return admission.Denied(fmt.Sprintf("%s is not a valid agent username", userName))
-	}
-	if !strings.Contains(byoHost.Name, substrs[2]) {
-		return admission.Denied(fmt.Sprintf("%s cannot create/update resource %s", userName, byoHost.Name))
+	// An agent can create and update only the ByoHost of its own host.
+	userName := req.UserInfo.Username
+	if userName != hostUsernamePrefix+byoHost.Name {
+		return admission.Denied(fmt.Sprintf("%s cannot create/update ByoHost %s: a member of %s can create/update only the ByoHost named after its username %s<name>", userName, byoHost.Name, hostsGroup, hostUsernamePrefix))
 	}
 	return admission.Allowed("")
 }
