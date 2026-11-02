@@ -5,7 +5,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/pflag"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -41,6 +43,7 @@ var (
 	setupLog             = ctrl.Log.WithName("setup")
 	enableLeaderElection bool
 	probeAddr            string
+	requeuePeriod        time.Duration
 	managerOptions       = flags.ManagerOptions{}
 )
 
@@ -68,6 +71,8 @@ func setFlags() {
 	fs.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	fs.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	fs.DurationVar(&requeuePeriod, "requeue-period", byohcontrollers.DefaultRequeuePeriod,
+		"The interval to check again while a controller waits, such as while a ByoMachine waits for a free ByoHost.")
 	flags.AddManagerOptions(fs, &managerOptions)
 	pflag.Parse()
 }
@@ -80,6 +85,11 @@ func setFlags() {
 func main() {
 	setFlags()
 	ctrl.SetLogger(klog.Background())
+
+	if requeuePeriod <= 0 {
+		setupLog.Error(fmt.Errorf("--requeue-period must be positive, got %s", requeuePeriod), "invalid flag")
+		os.Exit(1)
+	}
 
 	tlsOptions, metricsOptions, err := flags.GetManagerOptions(managerOptions)
 	if err != nil {
@@ -138,10 +148,11 @@ func main() {
 	}
 
 	if err = (&byohcontrollers.ByoMachineReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		ClusterCache: clusterCache,
-		Recorder:     mgr.GetEventRecorder("byomachine-controller"),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		ClusterCache:  clusterCache,
+		Recorder:      mgr.GetEventRecorder("byomachine-controller"),
+		RequeuePeriod: requeuePeriod,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoMachine")
 		os.Exit(1)
@@ -161,8 +172,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&byohcontrollers.ByoClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		RequeuePeriod: requeuePeriod,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoCluster")
 		os.Exit(1)

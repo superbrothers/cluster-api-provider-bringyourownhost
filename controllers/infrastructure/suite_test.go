@@ -7,6 +7,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -128,6 +129,8 @@ var _ = BeforeSuite(func() {
 		Client:       k8sManager.GetClient(),
 		ClusterCache: clustercache.NewFakeClusterCache(clientFake, client.ObjectKey{Name: capiCluster.Name, Namespace: capiCluster.Namespace}),
 		Recorder:     recorder,
+		// Differs from the default, to check that the reconciler uses it.
+		RequeuePeriod: 3 * time.Second,
 	}
 	err = reconciler.SetupWithManager(context.TODO(), k8sManager)
 	Expect(err).NotTo(HaveOccurred())
