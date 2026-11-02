@@ -15,6 +15,7 @@ import (
 	"github.com/superbrothers/cluster-api-provider-bringyourownhost/test/builder"
 	eventutils "github.com/superbrothers/cluster-api-provider-bringyourownhost/test/utils/events"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
@@ -26,6 +27,7 @@ import (
 	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -713,6 +715,115 @@ var _ = Describe("Controllers/ByomachineController", func() {
 				Expect(events).Should(ConsistOf([]string{
 					"Warning ByoHostSelectionFailed No available ByoHost",
 				}))
+			})
+		})
+
+		Context("When another ByoMachine claims the ByoHost at the same time", func() {
+			const anotherByoMachineLabel = "default.another-byomachine"
+			// Only the hosts of this test match the selector of the ByoMachine.
+			raceTestLabels := map[string]string{"race-test": "true"}
+			var (
+				claimedHost      *infrastructurev1beta1.ByoHost
+				racingReconciler *controllers.ByoMachineReconciler
+			)
+
+			BeforeEach(func() {
+				byoMachine.Spec.Selector = &metav1.LabelSelector{MatchLabels: raceTestLabels}
+				Expect(k8sClientUncached.Update(ctx, byoMachine)).Should(Succeed())
+
+				claimedHost = builder.ByoHost(defaultNamespace, "host-claimed-by-another").WithLabels(raceTestLabels).Build()
+				Expect(k8sClientUncached.Create(ctx, claimedHost)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, claimedHost)).Should(Succeed())
+				})
+
+				watchClient, err := client.NewWithWatch(cfg, client.Options{Scheme: scheme.Scheme})
+				Expect(err).NotTo(HaveOccurred())
+				claimed := false
+				// Another ByoMachine claims the host after this ByoMachine read
+				// it, and before this ByoMachine patches it.
+				racingClient := interceptor.NewClient(watchClient, interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, p client.Patch, opts ...client.PatchOption) error {
+						if host, ok := obj.(*infrastructurev1beta1.ByoHost); ok && !claimed {
+							claimed = true
+							another := &infrastructurev1beta1.ByoHost{}
+							Expect(c.Get(ctx, client.ObjectKeyFromObject(host), another)).Should(Succeed())
+							another.Labels = map[string]string{
+								clusterv1.ClusterNameLabel:                    "another-cluster",
+								infrastructurev1beta1.AttachedByoMachineLabel: anotherByoMachineLabel,
+							}
+							Expect(c.Update(ctx, another)).Should(Succeed())
+						}
+						return c.Patch(ctx, obj, p, opts...)
+					},
+				})
+				racingReconciler = &controllers.ByoMachineReconciler{
+					Client:        racingClient,
+					ClusterCache:  reconciler.ClusterCache,
+					Recorder:      recorder,
+					RequeuePeriod: reconciler.RequeuePeriod,
+				}
+			})
+
+			It("should not take the ByoHost, and should attach another one", func() {
+				res, err := racingReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				// Picks a host again soon, before the requeue period to wait for a free one.
+				Expect(res.RequeueAfter).To(BeNumerically(">", 0))
+				Expect(res.RequeueAfter).To(BeNumerically("<", reconciler.RequeuePeriod))
+
+				updatedClaimedHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(claimedHost), updatedClaimedHost)).Should(Succeed())
+				Expect(updatedClaimedHost.Labels[infrastructurev1beta1.AttachedByoMachineLabel]).To(Equal(anotherByoMachineLabel))
+				Expect(updatedClaimedHost.Labels[clusterv1.ClusterNameLabel]).To(Equal("another-cluster"))
+				Expect(updatedClaimedHost.Status.MachineRef).To(BeNil())
+
+				freeHost := builder.ByoHost(defaultNamespace, "host-free-after-conflict").WithLabels(raceTestLabels).Build()
+				Expect(k8sClientUncached.Create(ctx, freeHost)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, freeHost)).Should(Succeed())
+				})
+				Expect(clientFake.Create(ctx, builder.Node(defaultNamespace, freeHost.Name).Build())).Should(Succeed())
+
+				_, err = racingReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+
+				attachedHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(freeHost), attachedHost)).Should(Succeed())
+				Expect(attachedHost.Status.MachineRef).NotTo(BeNil())
+				Expect(attachedHost.Status.MachineRef.Name).To(Equal(byoMachine.Name))
+				Expect(attachedHost.Labels[infrastructurev1beta1.AttachedByoMachineLabel]).To(Equal(defaultNamespace + "." + byoMachine.Name))
+
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(claimedHost), updatedClaimedHost)).Should(Succeed())
+				Expect(updatedClaimedHost.Labels[infrastructurev1beta1.AttachedByoMachineLabel]).To(Equal(anotherByoMachineLabel))
+			})
+		})
+
+		Context("When an attached ByoHost has no machineRef", func() {
+			BeforeEach(func() {
+				// The ByoMachine claimed the host with the labels, and failed to set status.machineRef.
+				byoHost = builder.ByoHost(defaultNamespace, "host-without-machineref").
+					WithLabels(map[string]string{
+						clusterv1.ClusterNameLabel:                    defaultClusterName,
+						infrastructurev1beta1.AttachedByoMachineLabel: defaultNamespace + "." + byoMachine.Name,
+					}).
+					Build()
+				Expect(k8sClientUncached.Create(ctx, byoHost)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, byoHost)).Should(Succeed())
+				})
+				WaitForObjectsToBePopulatedInCache(byoHost)
+				Expect(clientFake.Create(ctx, builder.Node(defaultNamespace, byoHost.Name).Build())).Should(Succeed())
+			})
+
+			It("should set machineRef of the ByoHost", func() {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+
+				updatedHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(byoHost), updatedHost)).Should(Succeed())
+				Expect(updatedHost.Status.MachineRef).NotTo(BeNil())
+				Expect(updatedHost.Status.MachineRef.Name).To(Equal(byoMachine.Name))
 			})
 		})
 

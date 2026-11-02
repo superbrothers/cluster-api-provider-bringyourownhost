@@ -34,6 +34,7 @@ spec:
         - --insecure-diagnostics=${CAPI_INSECURE_DIAGNOSTICS:=false}
         - --health-probe-bind-address=:8081
         - --requeue-period=${BYOH_REQUEUE_PERIOD:=10s}
+        - --byomachine-concurrency=${BYOH_BYOMACHINE_CONCURRENCY:=1}
         image: gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller:latest
         name: manager
         ports:

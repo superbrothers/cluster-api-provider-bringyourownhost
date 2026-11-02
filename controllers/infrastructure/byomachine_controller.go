@@ -28,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -51,6 +52,11 @@ const (
 	// DefaultRequeuePeriod is the default interval to check again while a
 	// controller waits for a resource, such as a free ByoHost.
 	DefaultRequeuePeriod = 10 * time.Second
+	// claimConflictRequeueAfter is the delay to pick a ByoHost again after
+	// another writer has changed the ByoHost that the ByoMachine was claiming.
+	// It is short, as the ByoMachine does not wait for a resource, and gives
+	// the cache time to catch up.
+	claimConflictRequeueAfter = 1 * time.Second
 )
 
 // requeuePeriodOrDefault returns the requeue period, or DefaultRequeuePeriod
@@ -72,6 +78,10 @@ type ByoMachineReconciler struct {
 	// for a free ByoHost or for the installer config. DefaultRequeuePeriod is
 	// used when it is not set.
 	RequeuePeriod time.Duration
+	// MaxConcurrentReconciles is the number of ByoMachines to process
+	// simultaneously. The default of controller-runtime (1) is used when it is
+	// not set.
+	MaxConcurrentReconciles int
 }
 
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines,verbs=get;list;watch;create;update;patch;delete
@@ -250,12 +260,8 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 
 	controllerutil.AddFinalizer(machineScope.ByoMachine, infrav1.MachineFinalizer)
 
-	if machineScope.ByoHost != nil {
-		// if there is already byohost associated with it, make sure the paused status of byohost is false
-		if err := r.setPausedConditionForByoHost(ctx, machineScope, false); err != nil {
-			logger.Error(err, "Set resume flag for byohost failed")
-			return ctrl.Result{}, err
-		}
+	if err := r.reconcileAttachedByoHost(ctx, machineScope); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	if machineScope.ByoMachine.Spec.InstallerRef != nil {
@@ -344,6 +350,7 @@ func (r *ByoMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(controlledType).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Watches(
 			&infrav1.ByoHost{},
 			handler.EnqueueRequestsFromMapFunc(ByoHostToByoMachineMapFunc(controlledTypeGVK)),
@@ -541,19 +548,8 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	}
 	// TODO- Needs smarter logic
 	host := hostsList.Items[0]
+	base := host.DeepCopy()
 
-	byohostHelper, err := v1beta1patch.NewHelper(&host, r.Client)
-	if err != nil {
-		logger.Error(err, "Creating patch helper failed")
-	}
-
-	host.Status.MachineRef = &corev1.ObjectReference{
-		APIVersion: machineScope.ByoMachine.APIVersion,
-		Kind:       machineScope.ByoMachine.Kind,
-		Namespace:  machineScope.ByoMachine.Namespace,
-		Name:       machineScope.ByoMachine.Name,
-		UID:        machineScope.ByoMachine.UID,
-	}
 	// Set the cluster Label
 	hostLabels := host.Labels
 	if hostLabels == nil {
@@ -574,14 +570,62 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	host.Annotations[infrav1.EndPointIPAnnotation] = machineScope.Cluster.Spec.ControlPlaneEndpoint.Host
 	host.Annotations[infrav1.K8sVersionAnnotation] = strings.Split(machineScope.Machine.Spec.Version, "+")[0]
 
-	err = byohostHelper.Patch(ctx, &host)
+	// Claim the host with the labels, with optimistic locking: the patch fails
+	// with a conflict when the host has changed since it was read, for example
+	// when another ByoMachine has claimed it. Without the lock, the last patch
+	// would win, and two ByoMachines would take the same host.
+	err = r.Client.Patch(ctx, &host, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	if apierrors.IsConflict(err) {
+		logger.Info("ByoHost changed while claiming it, picking a host again", "byohost", host.Name)
+		return ctrl.Result{RequeueAfter: claimConflictRequeueAfter}, nil
+	}
 	if err != nil {
 		logger.Error(err, "failed to patch byohost")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.setMachineRef(ctx, machineScope, &host); err != nil {
 		return ctrl.Result{}, err
 	}
 	logger.Info("Successfully attached Byohost", "byohost", host.Name)
 	machineScope.ByoHost = &host
 	return ctrl.Result{}, nil
+}
+
+// reconcileAttachedByoHost makes sure that the ByoHost attached to the
+// ByoMachine, if any, is not paused, and has status.machineRef. The ByoMachine
+// claims the host with the labels before it sets status.machineRef, which the
+// agent waits for, so set it again when setting it has failed.
+func (r *ByoMachineReconciler) reconcileAttachedByoHost(ctx context.Context, machineScope *byoMachineScope) error {
+	if machineScope.ByoHost == nil {
+		return nil
+	}
+	if err := r.setPausedConditionForByoHost(ctx, machineScope, false); err != nil {
+		log.FromContext(ctx).Error(err, "Set resume flag for byohost failed")
+		return err
+	}
+	if machineScope.ByoHost.Status.MachineRef == nil {
+		return r.setMachineRef(ctx, machineScope, machineScope.ByoHost)
+	}
+	return nil
+}
+
+// setMachineRef sets the ByoMachine to status.machineRef of the ByoHost that
+// the ByoMachine has claimed with the labels.
+func (r *ByoMachineReconciler) setMachineRef(ctx context.Context, machineScope *byoMachineScope, host *infrav1.ByoHost) error {
+	base := host.DeepCopy()
+	host.Status.MachineRef = &corev1.ObjectReference{
+		APIVersion: machineScope.ByoMachine.APIVersion,
+		Kind:       machineScope.ByoMachine.Kind,
+		Namespace:  machineScope.ByoMachine.Namespace,
+		Name:       machineScope.ByoMachine.Name,
+		UID:        machineScope.ByoMachine.UID,
+	}
+	if err := r.Client.Status().Patch(ctx, host, client.MergeFrom(base)); err != nil {
+		log.FromContext(ctx).Error(err, "failed to patch the status of byohost", "byohost", host.Name)
+		return err
+	}
+	return nil
 }
 
 // ByoHostToByoMachineMapFunc returns a handler.ToRequestsFunc that watches for
