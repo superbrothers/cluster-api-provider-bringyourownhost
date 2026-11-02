@@ -60,7 +60,7 @@ If someone wants to implement their own installer controller then they need to f
 - If the Cluster to which this resource belongs cannot be found, exit the reconciliation
 - If `ByoMachine.status.condition.ByoHostReady` reason is not equal to `InstallationSecretNotAvailableReason`, exit the reconciliation
 - If `status.ready` is true, exit the reconciliation
-- Deterministically generate the name for the installation secret
+- Deterministically generate the name for the installation secret. It must differ from the name of the Machine, which the bootstrap data secret of the Machine has. The default installer uses `<name of the K8sInstallerConfig>-installation`.
 - Try to retrieve the Secret with the name from the previous step
   - If it does not exist, generate installation/uninstallation data using `ByoMachine.status.hostinfo` details and create the Secret with the following data:
     - _`install`_ (string): contains installation bash script
