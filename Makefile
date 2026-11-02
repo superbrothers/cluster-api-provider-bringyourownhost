@@ -61,6 +61,7 @@ SHELL = /usr/bin/env bash -o pipefail
 all: build
 
 HOST_AGENT_DIR ?= agent
+HOST_AGENT_ARCHS ?= amd64 arm64
 
 ##@ General
 
@@ -237,8 +238,10 @@ YQ = $(shell pwd)/bin/yq-$(YQ_VER)
 yq: ## Download yq locally if necessary.
 	$(call go-get-tool,$(YQ),github.com/mikefarah/yq/v4@$(YQ_VER))
 
-host-agent-binaries: ## Builds the binaries for the host-agent
-	RELEASE_BINARY=./byoh-hostagent GOOS=linux GOARCH=amd64 GOLDFLAGS="$(LDFLAGS) $(STATIC)" \
+host-agent-binaries: $(addprefix host-agent-binary-,$(HOST_AGENT_ARCHS)) ## Builds the binaries for the host-agent
+
+host-agent-binary-%:
+	RELEASE_BINARY=./byoh-hostagent GOOS=linux GOARCH=$* GOLDFLAGS="$(LDFLAGS) $(STATIC)" \
 	HOST_AGENT_DIR=./$(HOST_AGENT_DIR) $(MAKE) host-agent-binary
 
 host-agent-binary: $(RELEASE_DIR)
@@ -279,7 +282,7 @@ build-metadata-yaml:
 	cp metadata.yaml $(RELEASE_DIR)/metadata.yaml
 
 build-host-agent-binary: host-agent-binaries
-	cp bin/byoh-hostagent-linux-amd64 $(RELEASE_DIR)/byoh-hostagent-linux-amd64
+	cp $(addprefix bin/byoh-hostagent-linux-,$(HOST_AGENT_ARCHS)) $(RELEASE_DIR)/
 
 
 # go-get-tool installs the package $2 (with @version) as the binary $1. The
