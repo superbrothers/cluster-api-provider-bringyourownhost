@@ -30,11 +30,15 @@ spec:
           value: "${MANUAL_CSR_APPROVAL:=disable}"
         args:
         - --enable-leader-election
-        - "--metrics-bind-addr=127.0.0.1:8080"
+        - --diagnostics-address=${CAPI_DIAGNOSTICS_ADDRESS:=:8443}
+        - --insecure-diagnostics=${CAPI_INSECURE_DIAGNOSTICS:=false}
         - --health-probe-bind-address=:8081
         image: gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller:latest
         name: manager
         ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
         - containerPort: 8081
           name: healthz
           protocol: TCP
