@@ -19,6 +19,15 @@ on:
       - 'PROJECT'
 
 jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Verify the systemd unit of containerd in the installer
+      run: make verify-containerd-service
+
   build-agent:
       runs-on: ubuntu-24.04
       steps:
