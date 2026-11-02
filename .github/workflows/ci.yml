@@ -9,7 +9,6 @@ on:
       - 'LICENSE'
       - 'NOTICE'
       - 'PROJECT'
-      - 'SECURITY_CONTACTS'
   pull_request:
     branches: [ main ]
     paths-ignore:
@@ -18,7 +17,6 @@ on:
       - 'LICENSE'
       - 'NOTICE'
       - 'PROJECT'
-      - 'SECURITY_CONTACTS'
 
 jobs:
   build-agent:
@@ -65,10 +63,3 @@ jobs:
 
     - name: Run test make target
       run: make test
-
-    - name: Upload test coverage
-      uses: codecov/codecov-action@v7
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: cover.out
-        verbose: true

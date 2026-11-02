@@ -15,5 +15,5 @@ about: Suggest an idea for this project
 **Environment:**
 
 - Cluster-api-provider-bringyourownhost version: 
-- Kubernetes version: (use `kubectl version --short`):
+- Kubernetes version: (use `kubectl version`):
 - OS (e.g. from `/etc/os-release`):
