@@ -31,14 +31,41 @@ spec:
         args:
         - --enable-leader-election
         - "--metrics-bind-addr=127.0.0.1:8080"
+        - --health-probe-bind-address=:8081
         image: gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller:latest
         name: manager
+        ports:
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: healthz
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: healthz
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        # TODO: Revisit these values with the memory usage in the e2e tests.
         resources:
           limits:
-            cpu: 100m
-            memory: 30Mi
+            memory: 512Mi
           requests:
-            cpu: 100m
-            memory: 20Mi
+            cpu: 10m
+            memory: 64Mi
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
