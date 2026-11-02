@@ -9,7 +9,6 @@ on:
       - 'LICENSE'
       - 'NOTICE'
       - 'PROJECT'
-      - 'SECURITY_CONTACTS'
 
 jobs:
   golangci:
