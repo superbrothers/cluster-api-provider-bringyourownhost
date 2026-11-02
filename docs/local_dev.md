@@ -143,10 +143,10 @@ Start the host agent on the host and keep it running
 ```shell
 docker exec -it $HOST_NAME bin/bash
 
-./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf
+./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=control-plane
 ```
 
-Repeat the same steps with by changing the `HOST_NAME` env variable for all the hosts that you created.
+Repeat the same steps with by changing the `HOST_NAME` env variable for all the hosts that you created. Start the agent of one host with `--label role=control-plane`, and the others with `--label role=worker`, as the cluster templates select the hosts by the label of the role. Use the IP of the host of the control plane as `CONTROL_PLANE_ENDPOINT_IP` below.
 
 Check if the hosts registered itself into the management cluster.
 
@@ -163,7 +163,7 @@ export NAMESPACE="default"
 export KUBERNETES_VERSION="v1.22.3"
 export CONTROL_PLANE_MACHINE_COUNT=1
 export WORKER_MACHINE_COUNT=1
-export CONTROL_PLANE_ENDPOINT_IP=<static IP from the subnet where the containers are running>
+export CONTROL_PLANE_ENDPOINT_IP=<IP of the host that you start with --label role=control-plane>
 ```
 
 From ```cluster-api-provider-bringyourownhost``` folder

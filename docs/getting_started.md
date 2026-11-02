@@ -139,9 +139,9 @@ $ cat /etc/hosts
 If you are trying this on your own hosts, then for each host
 1. Download the [byoh-hostagent-linux-amd64](https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/releases/download/v0.3.0/byoh-hostagent-linux-amd64)
 2. Copy the bootstrap-kubeconfig file as `bootstrap-kubeconfig.conf`
-3. Start the agent 
+3. Start the agent with the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label.
 ```shell
-./byoh-hostagent-linux-amd64 --bootstrap-kubeconfig bootstrap-kubeconfig.conf > byoh-agent.log 2>&1 &
+./byoh-hostagent-linux-amd64 --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=control-plane > byoh-agent.log 2>&1 &
 ```
 
 ---
@@ -163,17 +163,17 @@ docker cp ~/bootstrap-kubeconfig.conf host$i:/bootstrap-kubeconfig.conf
 done
 ```
 
-Start host agent on each of the hosts from root user and keep it running. 
+Start host agent on each of the hosts from root user and keep it running. Label `host1` with `role=control-plane` and `host2` with `role=worker`, as the cluster templates select the hosts by the label of the role.
 
 >**IMPORTANT NOTE**: Use the `--skip-installation` flag if using target `make prepare-byoh-docker-host-image-dev` as we already have k8s components included in this docker image. This flag will skip k8s installation attempt on the host. The `--skip-installation` flag should not be used with target `make prepare-byoh-docker-host-image` as it's docker image doesn't come with k8s components installed.
 
 ```shell
 export HOST_NAME=host1
-docker exec -it $HOST_NAME sh -c "chmod +x byoh-hostagent && ./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf"
+docker exec -it $HOST_NAME sh -c "chmod +x byoh-hostagent && ./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=control-plane"
 
 # do the same for host2 in a separate tab
 export HOST_NAME=host2
-docker exec -it $HOST_NAME sh -c "chmod +x byoh-hostagent && ./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf"
+docker exec -it $HOST_NAME sh -c "chmod +x byoh-hostagent && ./byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=worker"
 ```
 ---
 
@@ -186,18 +186,15 @@ kubectl get byohosts
 ## Create workload cluster
 Running the following command(on the host where you execute `clusterctl` in previous steps)
 
-**NOTE:** The `CONTROL_PLANE_ENDPOINT_IP` is an IP that must be an IP on the same subnet as the control plane machines, it should be also an IP that is not part of your DHCP range.
+**NOTE:** The `CONTROL_PLANE_ENDPOINT_IP` is the address of the load balancer in front of the API servers of the control plane. BYOH does not provide the load balancer, so prepare one for your environment. When the control plane has only one machine, you can use the IP of that host instead. `CONTROL_PLANE_ENDPOINT_PORT` sets the port of the endpoint (default `6443`).
 
-If you are using docker containers then you can find the control plane machine's network subnet by running
-
-```shell
-docker network inspect kind | jq -r 'map(.IPAM.Config[].Subnet) []'
-```
-Randomly assign any free IP within the network subnet to the `CONTROL_PLANE_ENDPOINT_IP`. The list of IP addresses currently in use can be found by
+If you are using docker containers with one control plane machine, use the IP of `host1`, which is labeled with `role=control-plane`:
 
 ```shell
-docker network inspect kind | jq -r 'map(.Containers[].IPv4Address) []'
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' host1
 ```
+
+The cluster templates update the machines without a spare host: the MachineDeployment uses `maxSurge: 0`. The control plane uses `CONTROL_PLANE_MAX_SURGE` (default `1`), which needs a spare host labeled with `role=control-plane`. Set it to `0` to update the control plane without a spare host, which needs 3 or more control plane machines.
 
 ### Create the workload cluster
 Generate the cluster.yaml for workload cluster
@@ -242,11 +239,7 @@ kubectl get secret/byoh-cluster-kubeconfig -o json \
   > ./byoh-cluster.kubeconfig
 ```
 
-The kubeconfig can then be used to apply a CNI for networking, for example, Calico:
-
-```shell
-KUBECONFIG=byoh-cluster.kubeconfig kubectl apply -f https://docs.projectcalico.org/v3.20/manifests/calico.yaml
-```
+The kubeconfig can then be used to install a CNI for networking, for example, Calico (https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/onpremises). The cluster templates use `192.168.0.0/16` for the pods.
 
 after that you should see your nodes turn into ready:
 
