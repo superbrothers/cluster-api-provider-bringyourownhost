@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -18,15 +19,21 @@ import (
 // +k8s:deepcopy-gen=false
 // ByoHostValidator validates ByoHosts
 type ByoHostValidator struct {
-	//	Client  client.Client
-	decoder *admission.Decoder
+	decoder admission.Decoder
+}
+
+// NewByoHostValidator returns a ByoHostValidator that decodes the objects in
+// admission requests with the given scheme.
+func NewByoHostValidator(scheme *runtime.Scheme) *ByoHostValidator {
+	return &ByoHostValidator{decoder: admission.NewDecoder(scheme)}
 }
 
 // To allow byoh manager service account to patch ByoHost CR
 const managerServiceAccount = "system:serviceaccount:byoh-system:byoh-controller-manager"
 
-//nolint: gocritic
 // Handle handles all the requests for ByoHost resource
+//
+//nolint:gocritic
 func (v *ByoHostValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	var response admission.Response
 
@@ -53,7 +60,7 @@ func (v *ByoHostValidator) handleCreateUpdate(req *admission.Request) admission.
 		return admission.Allowed("")
 	}
 	substrs := strings.Split(userName, ":")
-	if len(substrs) < 2 { //nolint: gomnd
+	if len(substrs) < 2 { //nolint:mnd
 		return admission.Denied(fmt.Sprintf("%s is not a valid agent username", userName))
 	}
 	if !strings.Contains(byoHost.Name, substrs[2]) {
@@ -72,10 +79,4 @@ func (v *ByoHostValidator) handleDelete(req *admission.Request) admission.Respon
 		return admission.Denied("cannot delete ByoHost when MachineRef is assigned")
 	}
 	return admission.Allowed("")
-}
-
-// InjectDecoder injects the decoder.
-func (v *ByoHostValidator) InjectDecoder(d *admission.Decoder) error {
-	v.decoder = d
-	return nil
 }

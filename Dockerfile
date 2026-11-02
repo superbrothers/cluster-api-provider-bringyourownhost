@@ -1,5 +1,7 @@
 # Build the manager binary
-FROM golang:1.20.7 as builder
+# GO_VERSION is passed by "make docker-build" from the toolchain directive in go.mod.
+ARG GO_VERSION
+FROM golang:${GO_VERSION} AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests

@@ -1,10 +1,10 @@
 # Kubernetes Cluster API Provider Bring Your Own Host (BYOH)
 <p align="center">
-<!-- lint card --><a href="https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/actions/workflows/lint.yml">
-<img src="https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/actions/workflows/lint.yml/badge.svg"></a>
+<!-- lint card --><a href="https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/lint.yml">
+<img src="https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/lint.yml/badge.svg"></a>
 <!-- test status -->
-<a href="https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/actions?query=event%3Apush+branch%3Amain+workflow%3ACI+">
-<img src="https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
+<a href="https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions?query=event%3Apush+branch%3Amain+workflow%3ACI+">
+<img src="https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/ci.yml/badge.svg?branch=main&event=push"></a>
 <!-- go doc / reference card -->
 <a href="https://pkg.go.dev/github.com/vmware-tanzu/cluster-api-provider-bringyourownhost">
 <img src="https://pkg.go.dev/badge/github.com/vmware-tanzu/cluster-api-provider-bringyourownhost.svg"></a>
@@ -88,7 +88,7 @@ If someone wants to implement their own installer controller then they need to f
 
 ## Compatibility with Cluster API
 
-- BYOH is currently compatible wth Cluster API v1beta1 (v1.0)
+- BYOH implements the Cluster API v1beta1 contract, and is built and tested against Cluster API v1.14
 
 ## Supported OS and Kubernetes versions
 | Operating System  | Architecture  | Kubernetes v1.24.* | Kubernetes v1.25.* | Kubernetes v1.26.* |

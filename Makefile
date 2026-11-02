@@ -15,6 +15,9 @@ BYOH_BASE_IMG_DEV = byoh/node:dev
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 
 REPO_ROOT := $(shell pwd)
+# Go version of the container images that build the binaries, taken from the
+# toolchain directive in go.mod.
+GO_VERSION ?= $(shell sed -n 's/^toolchain go//p' go.mod)
 GINKGO_FOCUS  ?=
 GINKGO_SKIP ?=
 GINKGO_NODES  ?= 1
@@ -30,6 +33,11 @@ BIN_DIR := bin
 TOOLS_BIN_DIR := $(TOOLS_DIR)/$(BIN_DIR)
 GINKGO := $(TOOLS_BIN_DIR)/ginkgo
 GINKGO_PKG := github.com/onsi/ginkgo/v2/ginkgo
+SETUP_ENVTEST_VER := v0.25.2
+SETUP_ENVTEST := $(TOOLS_BIN_DIR)/setup-envtest
+# Kubernetes version of the control plane binaries that envtest runs.
+ENVTEST_K8S_VERSION ?= 1.36.2
+ENVTEST_ASSETS = KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use -p path --bin-dir $(TOOLS_BIN_DIR) $(ENVTEST_K8S_VERSION))"
 
 BYOH_TEMPLATES := $(REPO_ROOT)/test/e2e/data/infrastructure-provider-byoh
 
@@ -44,7 +52,6 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
-# This is a requirement for 'setup-envtest.sh' in the test target.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -94,11 +101,12 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint
-lint: golangci-lint
-	${GOLANGCI_LINT} run
-golangci-lint:
-	[ -e ${GOLANGCI_LINT} ] || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell pwd)/bin v1.50.0
+GOLANGCI_LINT_VER := v2.12.2
+GOLANGCI_LINT = $(shell pwd)/bin/golangci-lint-$(GOLANGCI_LINT_VER)
+lint: golangci-lint ## Run golangci-lint.
+	$(GOLANGCI_LINT) run
+golangci-lint: ## Download golangci-lint locally if necessary.
+	$(call go-get-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VER))
 
 ##@ Build
 
@@ -109,7 +117,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
@@ -129,17 +137,17 @@ cluster-templates-v1beta1: kustomize ## Generate cluster templates for v1beta1
 # Run tests
 test: $(GINKGO) generate fmt vet manifests test-coverage ## Run unit tests
 
-test-coverage: prepare-byoh-docker-host-image ## Run test-coverage
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all -r --cover --coverprofile=cover.out --output-dir=. --skip-package=test .
+test-coverage: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run test-coverage
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r --cover --coverprofile=cover.out --output-dir=. --skip-package=test .
 
-agent-test: prepare-byoh-docker-host-image ## Run agent tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all -r $(HOST_AGENT_DIR) --coverprofile cover.out
+agent-test: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run agent tests
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r $(HOST_AGENT_DIR) --coverprofile cover.out
 
-controller-test: ## Run controller tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) --randomize-all controllers/infrastructure --coverprofile cover.out --vv
+controller-test: $(GINKGO) $(SETUP_ENVTEST) ## Run controller tests
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all controllers/infrastructure --coverprofile cover.out --vv
 
-webhook-test: ## Run webhook tests
-	source ./scripts/fetch_ext_bins.sh; fetch_tools; setup_envs; $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
+webhook-test: $(GINKGO) $(SETUP_ENVTEST) ## Run webhook tests
+	$(ENVTEST_ASSETS) $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
 
 test-e2e: take-user-input docker-build prepare-byoh-docker-host-image $(GINKGO) cluster-templates-e2e ## Run the end-to-end tests
 	$(GINKGO) -v -trace -tags=e2e -focus="$(GINKGO_FOCUS)" $(_SKIP_ARGS) -nodes=$(GINKGO_NODES) --noColor=$(GINKGO_NOCOLOR) $(GINKGO_ARGS) test/e2e -- \
@@ -183,6 +191,9 @@ take-user-input:
 $(GINKGO): # Build ginkgo from tools folder.
 	cd $(TOOLS_DIR); GOBIN=$(TOOLS_BIN_DIR) go install $(GINKGO_PKG)
 
+$(SETUP_ENVTEST): # Build setup-envtest, which downloads the envtest binaries.
+	GOBIN=$(TOOLS_BIN_DIR) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(SETUP_ENVTEST_VER)
+
 ##@ Deployment
 
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
@@ -202,17 +213,20 @@ publish-infra-yaml:kustomize # Generate infrastructure-components.yaml for the p
 	cd config/manager && $(KUSTOMIZE) edit set image gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller=${IMG}
 	$(KUSTOMIZE) build config/default > infrastructure-components.yaml
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
+CONTROLLER_GEN_VER := v0.21.0
+CONTROLLER_GEN = $(shell pwd)/bin/controller-gen-$(CONTROLLER_GEN_VER)
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VER))
 
-KUSTOMIZE = $(shell pwd)/bin/kustomize
+KUSTOMIZE_VER := v5.7.0
+KUSTOMIZE = $(shell pwd)/bin/kustomize-$(KUSTOMIZE_VER)
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.2)
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VER))
 
-YQ = $(shell pwd)/bin/yq
-yq: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(YQ),github.com/mikefarah/yq/v4@v4.31.1)
+YQ_VER := v4.45.4
+YQ = $(shell pwd)/bin/yq-$(YQ_VER)
+yq: ## Download yq locally if necessary.
+	$(call go-get-tool,$(YQ),github.com/mikefarah/yq/v4@$(YQ_VER))
 
 host-agent-binaries: ## Builds the binaries for the host-agent
 	RELEASE_BINARY=./byoh-hostagent GOOS=linux GOARCH=amd64 GOLDFLAGS="$(LDFLAGS) $(STATIC)" \
@@ -226,7 +240,7 @@ host-agent-binary: $(RELEASE_DIR)
 		-e GOARCH=$(GOARCH) \
 		-v "$$(pwd):/workspace$(DOCKER_VOL_OPTS)" \
 		-w /workspace \
-		golang:1.20.7 \
+		golang:$(GO_VERSION) \
 		go build -buildvcs=false -a -ldflags "$(GOLDFLAGS)" \
 		-o ./bin/$(notdir $(RELEASE_BINARY))-$(GOOS)-$(GOARCH) $(HOST_AGENT_DIR)
 
@@ -259,16 +273,16 @@ build-host-agent-binary: host-agent-binaries
 	cp bin/byoh-hostagent-linux-amd64 $(RELEASE_DIR)/byoh-hostagent-linux-amd64
 
 
-# go-get-tool will 'go get' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+# go-get-tool installs the package $2 (with @version) as the binary $1. The
+# binary names carry the version, so that changing a version installs it again.
 define go-get-tool
 @[ -f $(1) ] || { \
 set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
 echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
+TMP_DIR=$$(mktemp -d) ;\
+GOBIN=$$TMP_DIR go install $(2) ;\
+mkdir -p $(dir $(1)) ;\
+mv $$TMP_DIR/* $(1) ;\
 rm -rf $$TMP_DIR ;\
 }
 endef

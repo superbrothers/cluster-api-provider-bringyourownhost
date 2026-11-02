@@ -28,7 +28,7 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  image: kindest/node:v1.22.0
+  image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
 EOF
 
 kind create cluster --config kind-cluster.yaml
@@ -39,7 +39,7 @@ kind create cluster --config kind-cluster.yaml
 Installing cluster API into the Kubernetes cluster will turn it into a Cluster API management cluster.
 
 We are going using [tilt](https://tilt.dev/) in order to do so, so you can have your local environment set up for rapid iterations, as described in
-[Developing Cluster API with Tilt](https://cluster-api.sigs.k8s.io/developer/tilt.html).
+[Developing Cluster API with Tilt](https://cluster-api.sigs.k8s.io/developer/core/tilt).
 
 In order to do so you need to clone both https://github.com/kubernetes-sigs/cluster-api/ and https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost locally;
 
@@ -48,7 +48,7 @@ __Clone CAPI Repo__
 ```shell
 git clone git@github.com:kubernetes-sigs/cluster-api.git
 cd cluster-api
-git checkout v1.0.0 
+git checkout v1.14.3
 ```
 
 __Create a tilt-settings.json file__
@@ -293,7 +293,7 @@ This step describes providing custom kubernetes host components. They can be cop
 docker run --rm -v `pwd`/byoh-ingredients-download:/ingredients --env BUILD_ONLY=0 byoh-build-push-bundle <REPO>/<BYOH Bundle name>
 ```
 
-The specified above BYOH Bundle name must match one of the [Supported OS and kubernetes BYOH bundle names](##supported-OS-and-kubernetes)
+The specified above BYOH Bundle name must match one of the [Supported OS and kubernetes BYOH bundle names](#supported-os-and-kubernetes)
 
 ```shell
 # You can also build a tarball of the bundle without publishing. This will create a bundler.tar in the current directory and can be used for custom pushing

@@ -28,17 +28,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	klog "k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 // labelFlags is a flag that holds a map of label key values.
 // One or more key value pairs can be passed using the same flag
 // The following example sets labelFlags with two items:
-//     -label "key1=value1" -label "key2=value2"
+//
+//	-label "key1=value1" -label "key2=value2"
 type labelFlags map[string]string
 
 // String implements flag.Value interface
@@ -51,7 +52,8 @@ func (l *labelFlags) String() string {
 }
 
 // Set implements flag.Value interface
-//nolint: gomnd
+//
+//nolint:mnd
 func (l *labelFlags) Set(value string) error {
 	// account for comma-separated key-value pairs in a single invocation
 	if len(strings.Split(value, ",")) > 1 {
@@ -97,7 +99,8 @@ func setupflags() {
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	hiddenFlags := []string{"log-flush-frequency", "alsologtostderr", "log-backtrace-at", "log-dir", "logtostderr", "stderrthreshold", "vmodule", "azure-container-registry-config",
-		"log_backtrace_at", "log_dir", "log_file", "log_file_max_size", "add_dir_header", "skip_headers", "skip_log_headers", "one_output", "kubeconfig"}
+		"log_backtrace_at", "log_dir", "log_file", "log_file_max_size", "add_dir_header", "skip_headers", "skip_log_headers", "one_output", "kubeconfig",
+		"alsologtostderrthreshold", "legacy_stderr_threshold_behavior"}
 	for _, hiddenFlag := range hiddenFlags {
 		_ = pflag.CommandLine.MarkHidden(hiddenFlag)
 	}
@@ -145,7 +148,7 @@ func main() {
 	_ = clusterv1.AddToScheme(scheme)
 	_ = certv1.AddToScheme(scheme)
 
-	logger := klogr.New()
+	logger := klog.Background()
 	ctrl.SetLogger(logger)
 	hostName, err := os.Hostname()
 	if err != nil {
@@ -185,19 +188,22 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
-		Scheme:    scheme,
-		Namespace: namespace,
-		// this enables filtered watch of ByoHost based on the host name
-		// only ByoHost running for this host will be cached
-		NewCache: cache.BuilderWithOptions(cache.Options{
-			SelectorsByObject: cache.SelectorsByObject{
+		Scheme: scheme,
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{namespace: {}},
+			// this enables filtered watch of ByoHost based on the host name
+			// only ByoHost running for this host will be cached
+			ByObject: map[client.Object]cache.ByObject{
 				&infrastructurev1beta1.ByoHost{}: {
-					Field: fields.SelectorFromSet(fields.Set{"metadata.name": hostName}),
+					// Namespaces must be set here: when it is left empty, the
+					// cache uses the settings of DefaultNamespaces for this
+					// object and drops the field selector below.
+					Namespaces: map[string]cache.Config{namespace: {}},
+					Field:      fields.SelectorFromSet(fields.Set{"metadata.name": hostName}),
 				},
 			},
 		},
-		),
-		MetricsBindAddress: metricsbindaddress,
+		Metrics: metricsserver.Options{BindAddress: metricsbindaddress},
 	})
 	if err != nil {
 		logger.Error(err, "unable to start manager")
@@ -208,11 +214,12 @@ func main() {
 		logger.Info("skip-installation flag set, skipping installer initialisation")
 	}
 	hostReconciler := &reconciler.HostReconciler{
-		Client:              k8sClient,
-		CmdRunner:           cloudinit.CmdRunner{},
-		FileWriter:          cloudinit.FileWriter{},
-		TemplateParser:      setupTemplateParser(),
-		Recorder:            mgr.GetEventRecorderFor("hostagent-controller"),
+		Client:         k8sClient,
+		CmdRunner:      cloudinit.CmdRunner{},
+		FileWriter:     cloudinit.FileWriter{},
+		TemplateParser: setupTemplateParser(),
+		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
+		Recorder:            mgr.GetEventRecorderFor("hostagent-controller"), //nolint:staticcheck
 		SkipK8sInstallation: skipInstallation,
 		DownloadPath:        downloadpath,
 	}

@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	klog "k8s.io/klog/v2"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -79,7 +79,7 @@ func (hr *HostRegistrar) Register(hostName, namespace string, hostLabels map[str
 // UpdateHost updates the network interface and host platform details status for the host
 func (hr *HostRegistrar) UpdateHost(ctx context.Context, byoHost *infrastructurev1beta1.ByoHost) error {
 	klog.Info("Add Network Info")
-	helper, err := patch.NewHelper(byoHost, hr.K8sClient)
+	helper, err := v1beta1patch.NewHelper(byoHost, hr.K8sClient)
 	if err != nil {
 		return err
 	}

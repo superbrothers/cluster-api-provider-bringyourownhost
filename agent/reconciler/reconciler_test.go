@@ -18,9 +18,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 
 	controllerruntime "sigs.k8s.io/controller-runtime"
 )
@@ -69,7 +70,7 @@ var _ = Describe("Byohost Agent Tests", func() {
 			byoHost = builder.ByoHost(ns, hostName).Build()
 			Expect(k8sClient.Create(ctx, byoHost)).NotTo(HaveOccurred(), "failed to create byohost")
 			var err error
-			patchHelper, err = patch.NewHelper(byoHost, k8sClient)
+			patchHelper, err = v1beta1patch.NewHelper(byoHost, k8sClient)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			byoHostLookupKey = types.NamespacedName{Name: byoHost.Name, Namespace: ns}
@@ -86,12 +87,12 @@ var _ = Describe("Byohost Agent Tests", func() {
 			updatedByoHost := &infrastructurev1beta1.ByoHost{}
 			err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 			Expect(err).ToNot(HaveOccurred())
-			k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-			Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+			k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+			Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 				Type:     infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 				Status:   corev1.ConditionFalse,
 				Reason:   infrastructurev1beta1.WaitingForMachineRefReason,
-				Severity: clusterv1.ConditionSeverityInfo,
+				Severity: clusterv1beta1.ConditionSeverityInfo,
 			}))
 		})
 
@@ -106,7 +107,7 @@ var _ = Describe("Byohost Agent Tests", func() {
 					UID:        byoMachine.UID,
 					APIVersion: byoHost.APIVersion,
 				}
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 			})
 
 			It("should set the Reason to BootstrapDataSecretUnavailableReason", func() {
@@ -120,12 +121,12 @@ var _ = Describe("Byohost Agent Tests", func() {
 				err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 				Expect(err).ToNot(HaveOccurred())
 
-				byoHostRegistrationSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-				Expect(*byoHostRegistrationSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+				byoHostRegistrationSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+				Expect(*byoHostRegistrationSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 					Type:     infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 					Status:   corev1.ConditionFalse,
 					Reason:   infrastructurev1beta1.BootstrapDataSecretUnavailableReason,
-					Severity: clusterv1.ConditionSeverityInfo,
+					Severity: clusterv1beta1.ConditionSeverityInfo,
 				}))
 			})
 
@@ -135,7 +136,7 @@ var _ = Describe("Byohost Agent Tests", func() {
 					Namespace: "non-existent",
 					Name:      "non-existent",
 				}
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -174,7 +175,7 @@ runCmd:
 						infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
 					}
 
-					Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+					Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 				})
 
 				It("should skip k8s installation if skip-installation is set", func() {
@@ -189,8 +190,8 @@ runCmd:
 					err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 					Expect(err).ToNot(HaveOccurred())
 
-					k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-					Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+					k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+					Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 						Type:   infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 						Status: corev1.ConditionTrue,
 					}))
@@ -213,12 +214,12 @@ runCmd:
 					err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 					Expect(err).ToNot(HaveOccurred())
 
-					byoHostRegistrationSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
-					Expect(*byoHostRegistrationSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+					byoHostRegistrationSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+					Expect(*byoHostRegistrationSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 						Type:     infrastructurev1beta1.K8sComponentsInstallationSucceeded,
 						Status:   corev1.ConditionFalse,
 						Reason:   infrastructurev1beta1.K8sInstallationSecretUnavailableReason,
-						Severity: clusterv1.ConditionSeverityInfo,
+						Severity: clusterv1beta1.ConditionSeverityInfo,
 					}))
 				})
 
@@ -228,7 +229,7 @@ runCmd:
 						Namespace: "non-existent",
 						Name:      "non-existent",
 					}
-					Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+					Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 					result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 						NamespacedName: byoHostLookupKey,
@@ -265,7 +266,7 @@ runCmd:
 							infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
 						}
 
-						Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 					})
 
 					It("should execute bootstrap secret only once ", func() {
@@ -299,8 +300,8 @@ runCmd:
 						err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 						Expect(err).ToNot(HaveOccurred())
 
-						k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-						Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+						k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+						Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 							Type:   infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 							Status: corev1.ConditionTrue,
 						}))
@@ -314,8 +315,8 @@ runCmd:
 					})
 
 					It("should set K8sNodeBootstrapSucceeded to false with Reason CloudInitExecutionFailedReason if the bootstrap execution fails", func() {
-						conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
-						Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+						v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 						fakeCommandRunner.RunCmdReturns(errors.New("I failed"))
 
@@ -330,12 +331,12 @@ runCmd:
 						err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 						Expect(err).ToNot(HaveOccurred())
 
-						k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-						Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+						k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+						Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 							Type:     infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 							Status:   corev1.ConditionFalse,
 							Reason:   infrastructurev1beta1.CloudInitExecutionFailedReason,
-							Severity: clusterv1.ConditionSeverityError,
+							Severity: clusterv1beta1.ConditionSeverityError,
 						}))
 
 						// assert events
@@ -358,7 +359,7 @@ runCmd:
 							Namespace: invalidInstallationSecret.Namespace,
 							Name:      invalidInstallationSecret.Name,
 						}
-						Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 						result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 							NamespacedName: byoHostLookupKey,
@@ -380,7 +381,7 @@ runCmd:
 							Namespace: "non-existent",
 							Name:      "non-existent",
 						}
-						Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 						result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 							NamespacedName: byoHostLookupKey,
@@ -421,8 +422,8 @@ runCmd:
 						err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 						Expect(err).ToNot(HaveOccurred())
 
-						K8sComponentsInstallationSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
-						Expect(*K8sComponentsInstallationSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+						K8sComponentsInstallationSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+						Expect(*K8sComponentsInstallationSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 							Type:   infrastructurev1beta1.K8sComponentsInstallationSucceeded,
 							Status: corev1.ConditionTrue,
 						}))
@@ -449,8 +450,8 @@ runCmd:
 						err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 						Expect(err).ToNot(HaveOccurred())
 
-						k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-						Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+						k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+						Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 							Type:   infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 							Status: corev1.ConditionTrue,
 						}))
@@ -496,19 +497,19 @@ runCmd:
 					infrastructurev1beta1.BundleLookupBaseRegistryAnnotation: "projects.blah.com",
 					infrastructurev1beta1.K8sVersionAnnotation:               "1.22",
 				}
-				conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-				conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 			})
 
 			It("should skip node reset if k8s component installation failed", func() {
 				var err error
-				patchHelper, err = patch.NewHelper(byoHost, k8sClient)
+				patchHelper, err = v1beta1patch.NewHelper(byoHost, k8sClient)
 				Expect(err).ShouldNot(HaveOccurred())
 
-				conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded,
-					infrastructurev1beta1.K8sComponentsInstallationFailedReason, clusterv1.ConditionSeverityInfo, "")
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				v1beta1conditions.MarkFalse(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded,
+					infrastructurev1beta1.K8sComponentsInstallationFailedReason, clusterv1beta1.ConditionSeverityInfo, "")
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
 				})
@@ -522,7 +523,7 @@ runCmd:
 			It("should reset the node and set the Reason to K8sNodeAbsentReason", func() {
 
 				byoHost.Spec.UninstallationScript = &uninstallScript
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -545,12 +546,12 @@ runCmd:
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.K8sVersionAnnotation))
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.BundleLookupBaseRegistryAnnotation))
 
-				k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-				Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+				Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 					Type:     infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 					Status:   corev1.ConditionFalse,
 					Reason:   infrastructurev1beta1.K8sNodeAbsentReason,
-					Severity: clusterv1.ConditionSeverityInfo,
+					Severity: clusterv1beta1.ConditionSeverityInfo,
 				}))
 
 				// assert events
@@ -562,7 +563,7 @@ runCmd:
 
 			It("should return an error if we fail to load the uninstallation script", func() {
 				byoHost.Spec.UninstallationScript = nil
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -575,7 +576,7 @@ runCmd:
 				fakeCommandRunner.RunCmdReturnsOnCall(1, errors.New("failed to execute uninstall script"))
 				uninstallScript = `testcommand`
 				byoHost.Spec.UninstallationScript = &uninstallScript
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -593,7 +594,7 @@ runCmd:
 
 			It("should set K8sComponentsInstallationSucceeded to false if uninstall succeeds", func() {
 				byoHost.Spec.UninstallationScript = &uninstallScript
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -605,18 +606,18 @@ runCmd:
 				err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 				Expect(err).ToNot(HaveOccurred())
 
-				K8sComponentsInstallationSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
-				Expect(*K8sComponentsInstallationSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+				K8sComponentsInstallationSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
+				Expect(*K8sComponentsInstallationSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 					Type:     infrastructurev1beta1.K8sComponentsInstallationSucceeded,
 					Status:   corev1.ConditionFalse,
 					Reason:   infrastructurev1beta1.K8sNodeAbsentReason,
-					Severity: clusterv1.ConditionSeverityInfo,
+					Severity: clusterv1beta1.ConditionSeverityInfo,
 				}))
 			})
 
 			It("It should reset byoHost.Spec.InstallationSecret if uninstall succeeds", func() {
 				byoHost.Spec.UninstallationScript = &uninstallScript
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
 				})
@@ -631,7 +632,7 @@ runCmd:
 
 			It("It should reset byoHost.Spec.UninstallationScript if uninstall succeeds", func() {
 				byoHost.Spec.UninstallationScript = &uninstallScript
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 
 				result, reconcilerErr := hostReconciler.Reconcile(ctx, controllerruntime.Request{
 					NamespacedName: byoHostLookupKey,
@@ -657,12 +658,12 @@ runCmd:
 				err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 				Expect(err).ToNot(HaveOccurred())
 
-				k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-				Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+				Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 					Type:     infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 					Status:   corev1.ConditionFalse,
 					Reason:   infrastructurev1beta1.K8sNodeAbsentReason,
-					Severity: clusterv1.ConditionSeverityInfo,
+					Severity: clusterv1beta1.ConditionSeverityInfo,
 				}))
 			})
 
@@ -679,8 +680,8 @@ runCmd:
 				err := k8sClient.Get(ctx, byoHostLookupKey, updatedByoHost)
 				Expect(err).ToNot(HaveOccurred())
 
-				k8sNodeBootstrapSucceeded := conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
-				Expect(*k8sNodeBootstrapSucceeded).To(conditions.MatchCondition(clusterv1.Condition{
+				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
+				Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
 					Type:   infrastructurev1beta1.K8sNodeBootstrapSucceeded,
 					Status: corev1.ConditionTrue,
 				}))
@@ -696,7 +697,7 @@ runCmd:
 		Context("When the ByoHost has deletion timestamp set", func() {
 			BeforeEach(func() {
 				byoHost.SetFinalizers([]string{"test"})
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 				Expect(k8sClient.Delete(context.TODO(), byoHost)).NotTo(HaveOccurred())
 			})
 			It("should trigger reconcile delete", func() {
@@ -710,7 +711,7 @@ runCmd:
 
 			AfterEach(func() {
 				byoHost.SetFinalizers([]string{})
-				Expect(patchHelper.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
+				Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 			})
 		})
 

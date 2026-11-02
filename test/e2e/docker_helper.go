@@ -17,9 +17,10 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/system"
-	. "github.com/onsi/gomega" //nolint: stylecheck
+	"github.com/moby/go-archive"
+	. "github.com/onsi/gomega" //nolint:staticcheck
+	"github.com/onsi/gomega/gexec"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/cluster-api/test/framework"
@@ -29,7 +30,20 @@ const (
 	kindImage           = "byoh/node:e2e"
 	TempKubeconfigPath  = "/tmp/mgmt.conf"
 	bootstrapKubeconfig = "/tmp/boostrap-kubeconfig"
+	hostAgentPackage    = "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/agent"
 )
+
+// shellCommand returns the command that runs the given shell script.
+func shellCommand(script string) []string {
+	return []string{"sh", "-c", script}
+}
+
+// BuildHostAgentBinary builds a statically linked host agent binary, so that
+// it runs inside the BYO host containers regardless of the C library of the
+// machine that builds it.
+func BuildHostAgentBinary() (string, error) {
+	return gexec.BuildWithEnvironment(hostAgentPackage, []string{"CGO_ENABLED=0"})
+}
 
 type cpConfig struct {
 	followLink bool
@@ -151,7 +165,7 @@ func copyToContainer(ctx context.Context, cli *client.Client, copyConfig cpConfi
 	resolvedDstPath = dstDir
 	content = preparedArchive
 
-	options := types.CopyToContainerOptions{
+	options := container.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
@@ -176,7 +190,7 @@ func (r *ByoHostRunner) createDockerContainer() (container.CreateResponse, error
 		nil, r.ByoHostName)
 }
 
-func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt types.ContainerListOptions) error {
+func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt container.ListOptions) error {
 	var kubeconfig []byte
 	if r.NetworkInterface == "host" {
 		listopt.Filters.Add("name", r.ByoHostName)
@@ -189,39 +203,39 @@ func (r *ByoHostRunner) copyKubeconfig(config cpConfig, listopt types.ContainerL
 
 		re := regexp.MustCompile("server:.*")
 		kubeconfig = re.ReplaceAll(kubeconfig, []byte("server: https://127.0.0.1:"+r.Port))
-		Expect(os.WriteFile(TempKubeconfigPath, kubeconfig, 0644)).NotTo(HaveOccurred()) //nolint: gosec,gomnd
+		Expect(os.WriteFile(TempKubeconfigPath, kubeconfig, 0644)).NotTo(HaveOccurred()) //nolint:gosec,mnd
 
 		// If the --bootstrap-kubeconfig is not provided, the tests will use
 		// kubeconfig placed in ~/.byoh/config
 		if r.CommandArgs["--bootstrap-kubeconfig"] == "" {
 			// get the $HOME env variable to set the destination path for kubeconfig
-			execCommand, err := r.DockerClient.ContainerExecCreate(r.Context, containers[0].ID, types.ExecConfig{
+			execCommand, err := r.DockerClient.ContainerExecCreate(r.Context, containers[0].ID, container.ExecOptions{
 				AttachStdin:  false,
 				AttachStdout: true,
 				AttachStderr: true,
-				Cmd:          []string{"sh", "-c", "echo ${HOME}"},
+				Cmd:          shellCommand("echo ${HOME}"),
 			})
 			Expect(err).ShouldNot(HaveOccurred())
-			resp, err := r.DockerClient.ContainerExecAttach(r.Context, execCommand.ID, types.ExecStartCheck{})
+			resp, err := r.DockerClient.ContainerExecAttach(r.Context, execCommand.ID, container.ExecStartOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			defer resp.Close()
 			homeDir, err := resp.Reader.ReadString('\n')
 			Expect(err).ShouldNot(HaveOccurred())
 			homeDir = strings.TrimSuffix(homeDir, "\n")
 			// create the directory to place the kubeconfig
-			execCommand, err = r.DockerClient.ContainerExecCreate(r.Context, containers[0].ID, types.ExecConfig{
+			execCommand, err = r.DockerClient.ContainerExecCreate(r.Context, containers[0].ID, container.ExecOptions{
 				AttachStdin:  false,
 				AttachStdout: true,
 				AttachStderr: true,
-				Cmd:          []string{"sh", "-c", "mkdir ${HOME}/.byoh"},
+				Cmd:          shellCommand("mkdir ${HOME}/.byoh"),
 			})
 			Expect(err).ShouldNot(HaveOccurred())
-			err = r.DockerClient.ContainerExecStart(r.Context, execCommand.ID, types.ExecStartCheck{})
+			err = r.DockerClient.ContainerExecStart(r.Context, execCommand.ID, container.ExecStartOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			config.sourcePath = TempKubeconfigPath
 			// SplitAfterN used to remove the unwanted special characters in the homeDir
-			config.destPath = strings.SplitAfterN(strings.TrimSpace(homeDir)+"/.byoh/config", "/", 2)[1] //nolint: gomnd
+			config.destPath = strings.SplitAfterN(strings.TrimSpace(homeDir)+"/.byoh/config", "/", 2)[1] //nolint:mnd
 		} else {
 			config.sourcePath = TempKubeconfigPath
 			config.destPath = r.CommandArgs["--bootstrap-kubeconfig"]
@@ -260,7 +274,7 @@ func (r *ByoHostRunner) SetupByoDockerHost() (*container.CreateResponse, error) 
 	byohost, err = r.createDockerContainer()
 
 	Expect(err).NotTo(HaveOccurred())
-	Expect(r.DockerClient.ContainerStart(r.Context, byohost.ID, types.ContainerStartOptions{})).NotTo(HaveOccurred())
+	Expect(r.DockerClient.ContainerStart(r.Context, byohost.ID, container.StartOptions{})).NotTo(HaveOccurred())
 
 	config := cpConfig{
 		sourcePath: r.PathToHostAgentBinary,
@@ -269,7 +283,7 @@ func (r *ByoHostRunner) SetupByoDockerHost() (*container.CreateResponse, error) 
 	}
 	Expect(copyToContainer(r.Context, r.DockerClient, config)).NotTo(HaveOccurred())
 
-	listopt := types.ContainerListOptions{}
+	listopt := container.ListOptions{}
 	listopt.Filters = filters.NewArgs()
 
 	err = r.copyKubeconfig(config, listopt)
@@ -283,7 +297,7 @@ func (r *ByoHostRunner) ExecByoDockerHost(byohost *container.CreateResponse) (ty
 	for flag, arg := range r.CommandArgs {
 		cmdArgs = append(cmdArgs, flag, arg)
 	}
-	rconfig := types.ExecConfig{
+	rconfig := container.ExecOptions{
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          cmdArgs,
@@ -292,7 +306,7 @@ func (r *ByoHostRunner) ExecByoDockerHost(byohost *container.CreateResponse) (ty
 	resp, err := r.DockerClient.ContainerExecCreate(r.Context, byohost.ID, rconfig)
 	Expect(err).NotTo(HaveOccurred())
 
-	output, err := r.DockerClient.ContainerExecAttach(r.Context, resp.ID, types.ExecStartCheck{})
+	output, err := r.DockerClient.ContainerExecAttach(r.Context, resp.ID, container.ExecStartOptions{})
 	return output, byohost.ID, err
 }
 
@@ -301,7 +315,7 @@ func setControlPlaneIP(ctx context.Context, dockerClient *client.Client) {
 	if ok {
 		return
 	}
-	inspect, _ := dockerClient.NetworkInspect(ctx, "kind", types.NetworkInspectOptions{})
+	inspect, _ := dockerClient.NetworkInspect(ctx, "kind", network.InspectOptions{})
 	ipOctets := strings.Split(inspect.IPAM.Config[0].Subnet, ".")
 
 	// The ControlPlaneEndpoint is a static IP that is in the hosts'

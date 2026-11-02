@@ -5,11 +5,9 @@ package controllers_test
 
 import (
 	"context"
-	"go/build"
 	"path/filepath"
 	"testing"
 
-	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -20,17 +18,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	infrastructurev1beta1 "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	controllers "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/controllers/infrastructure"
 	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/builder"
+	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/utils/crds"
 
 	//+kubebuilder:scaffold:imports
 
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
-	"sigs.k8s.io/cluster-api/controllers/remote"
+	bootstrapv1 "sigs.k8s.io/cluster-api/api/bootstrap/kubeadm/v1beta2"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -77,16 +77,19 @@ var _ = BeforeSuite(func() {
 	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
+	capiCoreCRDs, err := crds.ClusterAPICoreDir()
+	Expect(err).NotTo(HaveOccurred())
+	capiKubeadmBootstrapCRDs, err := crds.ClusterAPIKubeadmBootstrapDir()
+	Expect(err).NotTo(HaveOccurred())
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
 			filepath.Join("..", "..", "config", "crd", "bases"),
-			filepath.Join(build.Default.GOPATH, "pkg", "mod", "sigs.k8s.io", "cluster-api@v1.4.4", "config", "crd", "bases"),
-			filepath.Join(build.Default.GOPATH, "pkg", "mod", "sigs.k8s.io", "cluster-api@v1.4.4", "bootstrap", "kubeadm", "config", "crd", "bases"),
+			capiCoreCRDs,
+			capiKubeadmBootstrapCRDs,
 		},
 		ErrorIfCRDPathMissing: true,
 	}
 
-	var err error
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -103,8 +106,8 @@ var _ = BeforeSuite(func() {
 	//+kubebuilder:scaffold:scheme
 
 	k8sManager, err = ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:             scheme.Scheme,
-		MetricsBindAddress: ":6080",
+		Scheme:  scheme.Scheme,
+		Metrics: metricsserver.Options{BindAddress: ":6080"},
 	})
 	Expect(err).NotTo(HaveOccurred())
 
@@ -125,9 +128,9 @@ var _ = BeforeSuite(func() {
 
 	recorder = record.NewFakeRecorder(32)
 	reconciler = &controllers.ByoMachineReconciler{
-		Client:   k8sManager.GetClient(),
-		Tracker:  remote.NewTestClusterCacheTracker(logr.New(logf.NullLogSink{}), clientFake, scheme.Scheme, client.ObjectKey{Name: capiCluster.Name, Namespace: capiCluster.Namespace}),
-		Recorder: recorder,
+		Client:       k8sManager.GetClient(),
+		ClusterCache: clustercache.NewFakeClusterCache(clientFake, client.ObjectKey{Name: capiCluster.Name, Namespace: capiCluster.Namespace}),
+		Recorder:     recorder,
 	}
 	err = reconciler.SetupWithManager(context.TODO(), k8sManager)
 	Expect(err).NotTo(HaveOccurred())

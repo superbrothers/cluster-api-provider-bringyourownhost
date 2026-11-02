@@ -13,18 +13,22 @@ on:
 
 jobs:
   golangci:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
-    - name: Install Go 1.20.7
-      uses: actions/setup-go@v4
-      with:
-        go-version: 1.20.7
-
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    # The Makefile pins the version of golangci-lint for local runs too.
+    - name: Get the golangci-lint version
+      id: golangci-lint-version
+      run: echo "version=$(sed -n 's/^GOLANGCI_LINT_VER := //p' Makefile)" >> "$GITHUB_OUTPUT"
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v9
       with:
-        version: v1.51.0
-        skip-go-installation: true
+        version: ${{ steps.golangci-lint-version.outputs.version }}

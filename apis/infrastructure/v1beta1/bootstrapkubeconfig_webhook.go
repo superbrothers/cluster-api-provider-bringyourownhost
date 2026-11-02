@@ -4,15 +4,15 @@
 package v1beta1
 
 import (
+	"context"
 	b64 "encoding/base64"
 	"encoding/pem"
 	"net/url"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -22,50 +22,45 @@ var bootstrapkubeconfiglog = logf.Log.WithName("bootstrapkubeconfig-resource")
 const APIServerURLScheme = "https"
 
 func (r *BootstrapKubeconfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+	return ctrl.NewWebhookManagedBy(mgr, r).
+		WithValidator(&bootstrapKubeconfigValidator{}).
 		Complete()
 }
 
 //+kubebuilder:webhook:path=/validate-infrastructure-cluster-x-k8s-io-v1beta1-bootstrapkubeconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=infrastructure.cluster.x-k8s.io,resources=bootstrapkubeconfigs,verbs=create;update,versions=v1beta1,name=vbootstrapkubeconfig.kb.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &BootstrapKubeconfig{}
+// bootstrapKubeconfigValidator validates BootstrapKubeconfig objects.
+type bootstrapKubeconfigValidator struct{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *BootstrapKubeconfig) ValidateCreate() error {
+var _ admission.Validator[*BootstrapKubeconfig] = &bootstrapKubeconfigValidator{}
+
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateCreate(_ context.Context, r *BootstrapKubeconfig) (admission.Warnings, error) {
 	bootstrapkubeconfiglog.Info("validate create", "name", r.Name)
 
-	if err := r.validateAPIServer(); err != nil {
-		return err
-	}
-
-	if err := r.validateCAData(); err != nil {
-		return err
-	}
-
-	return nil
+	return nil, r.validate()
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *BootstrapKubeconfig) ValidateUpdate(old runtime.Object) error {
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateUpdate(_ context.Context, _, r *BootstrapKubeconfig) (admission.Warnings, error) {
 	bootstrapkubeconfiglog.Info("validate update", "name", r.Name)
 
+	return nil, r.validate()
+}
+
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type
+func (*bootstrapKubeconfigValidator) ValidateDelete(_ context.Context, r *BootstrapKubeconfig) (admission.Warnings, error) {
+	bootstrapkubeconfiglog.Info("validate delete", "name", r.Name)
+
+	return nil, nil
+}
+
+func (r *BootstrapKubeconfig) validate() error {
 	if err := r.validateAPIServer(); err != nil {
 		return err
 	}
 
-	if err := r.validateCAData(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *BootstrapKubeconfig) ValidateDelete() error {
-	bootstrapkubeconfiglog.Info("validate delete", "name", r.Name)
-
-	return nil
+	return r.validateCAData()
 }
 
 func (r *BootstrapKubeconfig) validateAPIServer() error {

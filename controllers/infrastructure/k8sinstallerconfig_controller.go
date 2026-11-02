@@ -16,19 +16,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/pointer"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"k8s.io/utils/ptr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
-	"sigs.k8s.io/cluster-api/util/conditions"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // K8sInstallerConfigReconciler reconciles a K8sInstallerConfig object
@@ -84,7 +83,7 @@ func (r *K8sInstallerConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	helper, err := patch.NewHelper(config, r.Client)
+	helper, err := v1beta1patch.NewHelper(config, r.Client)
 	if err != nil {
 		logger.Error(err, "unable to create helper")
 		return ctrl.Result{}, err
@@ -131,8 +130,8 @@ func (r *K8sInstallerConfigReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	switch {
 	// waiting for ByoMachine to updating it's ByoHostReady condition to false for reason InstallationSecretNotAvailableReason
-	case conditions.GetReason(byoMachine, infrav1.BYOHostReady) != infrav1.InstallationSecretNotAvailableReason:
-		logger.Info("ByoMachine is not waiting for InstallationSecret", "reason", conditions.GetReason(byoMachine, infrav1.BYOHostReady))
+	case v1beta1conditions.GetReason(byoMachine, infrav1.BYOHostReady) != infrav1.InstallationSecretNotAvailableReason:
+		logger.Info("ByoMachine is not waiting for InstallationSecret", "reason", v1beta1conditions.GetReason(byoMachine, infrav1.BYOHostReady))
 		return ctrl.Result{}, nil
 	// Status is ready means a config has been generated.
 	case config.Status.Ready:
@@ -182,7 +181,7 @@ func (r *K8sInstallerConfigReconciler) storeInstallationData(ctx context.Context
 					Kind:       scope.Config.Kind,
 					Name:       scope.Config.Name,
 					UID:        scope.Config.UID,
-					Controller: pointer.Bool(true),
+					Controller: ptr.To(true),
 				},
 			},
 		},
@@ -219,7 +218,7 @@ func (r *K8sInstallerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&infrav1.K8sInstallerConfig{}).
 		Watches(
-			&source.Kind{Type: &infrav1.ByoMachine{}},
+			&infrav1.ByoMachine{},
 			handler.EnqueueRequestsFromMapFunc(r.ByoMachineToK8sInstallerConfigMapFunc),
 		).
 		Complete(r)
@@ -227,8 +226,7 @@ func (r *K8sInstallerConfigReconciler) SetupWithManager(mgr ctrl.Manager) error 
 
 // ByoMachineToK8sInstallerConfigMapFunc is a handler.ToRequestsFunc to be used to enqeue
 // request for reconciliation of K8sInstallerConfig.
-func (r *K8sInstallerConfigReconciler) ByoMachineToK8sInstallerConfigMapFunc(o client.Object) []ctrl.Request {
-	ctx := context.TODO()
+func (r *K8sInstallerConfigReconciler) ByoMachineToK8sInstallerConfigMapFunc(ctx context.Context, o client.Object) []ctrl.Request {
 	logger := log.FromContext(ctx)
 
 	m, ok := o.(*infrav1.ByoMachine)

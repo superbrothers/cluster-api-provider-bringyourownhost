@@ -14,7 +14,7 @@ import (
 	"github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/builder"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -131,7 +131,7 @@ var _ = Describe("Controllers/ByoclusterController", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(controllerutil.ContainsFinalizer(createdByoCluster, infrastructurev1beta1.ClusterFinalizer)).To(BeTrue())
 		Expect(createdByoCluster.Status.Ready).To(BeTrue())
-		Expect(createdByoCluster.Spec.ControlPlaneEndpoint.Port).To(Equal(int32(controllers.DefaultAPIEndpointPort)))
+		Expect(createdByoCluster.Spec.ControlPlaneEndpoint.Port).To(Equal(controllers.DefaultAPIEndpointPort))
 	})
 
 })

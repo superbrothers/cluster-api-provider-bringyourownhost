@@ -1,14 +1,15 @@
-ARG BASE_IMAGE=ubuntu:20.04
+ARG BASE_IMAGE=ubuntu:26.04
 FROM $BASE_IMAGE as build
 ARG TARGETARCH
 
+# Kernel modules are not installed in the image; the containers mount
+# /lib/modules from the machine that runs them.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        systemd conntrack iptables iproute2 ethtool socat util-linux mount \
+        systemd systemd-sysv conntrack iptables iproute2 ethtool socat util-linux mount \
         apparmor-utils ebtables kmod libseccomp2 pigz bash ca-certificates \
         rsync nfs-common fuse-overlayfs curl gnupg2 \
-        dbus ufw linux-image-$(uname -r) \
-    && ln -s "$(which systemd)" /sbin/init
+        dbus ufw
 
 FROM scratch
 COPY --from=build / /

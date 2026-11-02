@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
 
@@ -12,15 +11,16 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	klog "k8s.io/klog/v2"
-	"k8s.io/klog/v2/klogr"
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	byohcontrollers "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/controllers/infrastructure"
@@ -28,8 +28,10 @@ import (
 	infrastructurev1beta1 "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 
 	//+kubebuilder:scaffold:imports
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	"sigs.k8s.io/cluster-api/controllers/clustercache"
 	"sigs.k8s.io/cluster-api/controllers/remote"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
@@ -69,12 +71,12 @@ func setFlags() {
 // nolint: funlen, gocyclo
 func main() {
 	setFlags()
-	ctrl.SetLogger(klogr.New())
+	ctrl.SetLogger(klog.Background())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
+		WebhookServer:          webhook.NewServer(webhook.Options{Port: 9443}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "controller-leader-election-caph",
@@ -84,28 +86,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	remoteLogger := ctrl.Log.WithName("remote").WithName("ClusterCacheTracker")
-	options := remote.ClusterCacheTrackerOptions{Log: &remoteLogger}
-	tracker, err := remote.NewClusterCacheTracker(mgr, options)
+	ctx := ctrl.SetupSignalHandler()
+
+	// The ClusterCache reads the kubeconfig Secrets of workload clusters
+	// through this client, which reads from the cache of the manager.
+	secretCachingClient, err := client.New(mgr.GetConfig(), client.Options{
+		HTTPClient: mgr.GetHTTPClient(),
+		Cache: &client.CacheOptions{
+			Reader: mgr.GetCache(),
+		},
+	})
 	if err != nil {
-		setupLog.Error(err, "unable to create cluster cache tracker")
+		setupLog.Error(err, "unable to create secret caching client")
 		os.Exit(1)
 	}
 
-	if err = (&remote.ClusterCacheReconciler{
-		Client:  mgr.GetClient(),
-		Tracker: tracker,
-	}).SetupWithManager(context.TODO(), mgr, concurrency(0)); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ClusterCacheReconciler")
+	clusterCache, err := clustercache.SetupWithManager(ctx, mgr, clustercache.Options{
+		SecretClient: secretCachingClient,
+		Cache:        clustercache.CacheOptions{},
+		Client: clustercache.ClientOptions{
+			UserAgent: remote.DefaultClusterAPIUserAgent("byoh-controller-manager"),
+			Cache: clustercache.ClientCacheOptions{
+				DisableFor: []client.Object{
+					// Don't cache ConfigMaps & Secrets of workload clusters.
+					&corev1.ConfigMap{},
+					&corev1.Secret{},
+				},
+			},
+		},
+	}, controller.Options{})
+	if err != nil {
+		setupLog.Error(err, "unable to create cluster cache")
 		os.Exit(1)
 	}
 
 	if err = (&byohcontrollers.ByoMachineReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Tracker:  tracker,
-		Recorder: mgr.GetEventRecorderFor("byomachine-controller"),
-	}).SetupWithManager(context.TODO(), mgr); err != nil {
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		ClusterCache: clusterCache,
+		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
+		Recorder: mgr.GetEventRecorderFor("byomachine-controller"), //nolint:staticcheck
+	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoMachine")
 		os.Exit(1)
 	}
@@ -126,7 +147,7 @@ func main() {
 	if err = (&byohcontrollers.ByoClusterReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(context.TODO(), mgr); err != nil {
+	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ByoCluster")
 		os.Exit(1)
 	}
@@ -145,7 +166,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr.GetWebhookServer().Register("/validate-infrastructure-cluster-x-k8s-io-v1beta1-byohost", &webhook.Admission{Handler: &infrastructurev1beta1.ByoHostValidator{}})
+	mgr.GetWebhookServer().Register("/validate-infrastructure-cluster-x-k8s-io-v1beta1-byohost", &webhook.Admission{Handler: infrastructurev1beta1.NewByoHostValidator(mgr.GetScheme())})
 
 	if err = (&byohcontrollers.BootstrapKubeconfigReconciler{
 		Client: mgr.GetClient(),
@@ -170,12 +191,8 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-}
-
-func concurrency(c int) controller.Options {
-	return controller.Options{MaxConcurrentReconciles: c}
 }

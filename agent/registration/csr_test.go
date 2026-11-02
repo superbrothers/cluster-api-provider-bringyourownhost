@@ -20,7 +20,7 @@ import (
 	certv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2/klogr"
+	klog "k8s.io/klog/v2"
 )
 
 var _ = Describe("CSR Registration", func() {
@@ -157,7 +157,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			Expect(err).NotTo(HaveOccurred())
 			_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Create(ctx, byohCSR, metav1.CreateOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
-			CSRRegistrar, err := registration.NewByohCSR(cfg, klogr.New(), certExpiryDuration)
+			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
 			_, _, err = CSRRegistrar.RequestBYOHClientCert(hostName)
 			Expect(err).Should(HaveOccurred())
@@ -167,7 +167,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 		})
 		It("should timeout if the CSR is not approved", func() {
 			registration.CSRApprovalTimeout = time.Second * 5
-			CSRRegistrar, err := registration.NewByohCSR(cfg, klogr.New(), certExpiryDuration)
+			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = CSRRegistrar.BootstrapKubeconfig(hostName)
 			Expect(err).Should(HaveOccurred())
@@ -200,7 +200,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 				}
 			}()
 			registration.ConfigPath = "/non-existent-mount/config"
-			CSRRegistrar, err := registration.NewByohCSR(cfg, klogr.New(), certExpiryDuration)
+			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = CSRRegistrar.BootstrapKubeconfig(hostName)
 			Expect(err).Should(HaveOccurred())
@@ -232,7 +232,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 					return
 				}
 			}()
-			CSRRegistrar, err := registration.NewByohCSR(cfg, klogr.New(), certExpiryDuration)
+			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
 			err = CSRRegistrar.BootstrapKubeconfig(hostName)
 			Expect(err).ShouldNot(HaveOccurred())

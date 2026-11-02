@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/scheme"
-	"sigs.k8s.io/cluster-api/util/patch"
+	v1beta1patch "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/patch"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -66,7 +66,7 @@ var _ = Describe("ByohostWebhook", func() {
 				}
 				Expect(k8sClientUncached.Create(ctx, byoMachine)).Should(Succeed())
 
-				ph, err := patch.NewHelper(byoHost, ValidUserK8sClient)
+				ph, err := v1beta1patch.NewHelper(byoHost, ValidUserK8sClient)
 				Expect(err).ShouldNot(HaveOccurred())
 				byoHost.Status.MachineRef = &corev1.ObjectReference{
 					Kind:       "ByoMachine",
@@ -75,7 +75,7 @@ var _ = Describe("ByohostWebhook", func() {
 					UID:        byoMachine.UID,
 					APIVersion: byoHost.APIVersion,
 				}
-				Expect(ph.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).Should(Succeed())
+				Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			})
 
 			It("should reject the request", func() {
@@ -86,10 +86,10 @@ var _ = Describe("ByohostWebhook", func() {
 
 			AfterEach(func() {
 				// delete the byohost resource
-				ph, err := patch.NewHelper(byoHost, ValidUserK8sClient)
+				ph, err := v1beta1patch.NewHelper(byoHost, ValidUserK8sClient)
 				Expect(err).ShouldNot(HaveOccurred())
 				byoHost.Status.MachineRef = nil
-				Expect(ph.Patch(ctx, byoHost, patch.WithStatusObservedGeneration{})).Should(Succeed())
+				Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 				Expect(ValidUserK8sClient.Delete(ctx, byoHost)).Should(Succeed())
 			})
 		})
