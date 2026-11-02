@@ -9,11 +9,6 @@ BYOH agent is a binary that runs on the hosts and its responsibility include -
 
 Below flags are supported by the BYOH agent:-  
 ```
---downloadpath string 
-```
-File System path to keep the downloads (default `/var/lib/byoh/bundles`)
-
-```
 --bootstrap-kubeconfig string           
 ```
 Path to a bootstrap token kubeconfig to enable the bootstrap flow.

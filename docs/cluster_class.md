@@ -47,12 +47,6 @@ spec:
               kind: ByoMachineTemplate
               name: quickstart-worker-machinetemplate
   variables:
-    - name: bundleLookupBaseRegistry
-      required: true
-      schema:
-        openAPIV3Schema:
-          type: string
-          default: "https://projects.registry.vmware.com/cluster_api_provider_bringyourownhost"
     - name: controlPlaneIpAddr
       required: true
       schema:
@@ -65,19 +59,6 @@ spec:
           description: kube-vip manifest for the control plane.
           type: string
   patches:
-    - name: bundleLookupBaseRegistry
-      description: "Sets the bundleLookupBaseRegistry used for the BYOCluster."
-      definitions:
-        - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
-            kind: ByoClusterTemplate
-            matchResources:
-              infrastructureCluster: true
-          jsonPatches:
-            - op: add
-              path: "/spec/template/spec/bundleLookupBaseRegistry"
-              valueFrom:
-                variable: bundleLookupBaseRegistry
     - name: controlPlaneEndpoint
       description: "Sets control plane endpoint"
       definitions:
@@ -129,8 +110,6 @@ spec:
       metadata: {}
       replicas: 1
     variables:
-      - name: bundleLookupBaseRegistry
-        value: "projects.registry.vmware.com/cluster_api_provider_bringyourownhost"
       - name: controlPlaneIpAddr
         value: ${CONTROL_PLANE_ENDPOINT_IP}
       - name: kubeVipPodManifest
