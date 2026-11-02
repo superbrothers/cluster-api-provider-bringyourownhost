@@ -25,14 +25,9 @@ rules:
   - patch
   - update
 - apiGroups:
-  - ""
-  - byohosts
+  - events.k8s.io
   resources:
   - events
   verbs:
   - create
-  - get
-  - list
   - patch
-  - update
-  - watch

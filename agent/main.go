@@ -214,12 +214,11 @@ func main() {
 		logger.Info("skip-installation flag set, skipping installer initialisation")
 	}
 	hostReconciler := &reconciler.HostReconciler{
-		Client:         k8sClient,
-		CmdRunner:      cloudinit.CmdRunner{},
-		FileWriter:     cloudinit.FileWriter{},
-		TemplateParser: setupTemplateParser(),
-		// TODO: Move to GetEventRecorder, which needs the event calls to use the new events API.
-		Recorder:            mgr.GetEventRecorderFor("hostagent-controller"), //nolint:staticcheck
+		Client:              k8sClient,
+		CmdRunner:           cloudinit.CmdRunner{},
+		FileWriter:          cloudinit.FileWriter{},
+		TemplateParser:      setupTemplateParser(),
+		Recorder:            mgr.GetEventRecorder("hostagent-controller"),
 		SkipK8sInstallation: skipInstallation,
 		DownloadPath:        downloadpath,
 	}

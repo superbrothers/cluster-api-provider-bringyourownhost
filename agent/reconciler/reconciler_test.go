@@ -17,7 +17,7 @@ import (
 	eventutils "github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/test/utils/events"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
@@ -37,7 +37,7 @@ var _ = Describe("Byohost Agent Tests", func() {
 		byoHostLookupKey   types.NamespacedName
 		bootstrapSecret    *corev1.Secret
 		installationSecret *corev1.Secret
-		recorder           *record.FakeRecorder
+		recorder           *events.FakeRecorder
 		uninstallScript    string
 	)
 
@@ -45,7 +45,7 @@ var _ = Describe("Byohost Agent Tests", func() {
 		fakeCommandRunner = &cloudinitfakes.FakeICmdRunner{}
 		fakeFileWriter = &cloudinitfakes.FakeIFileWriter{}
 		fakeTemplateParser = &cloudinitfakes.FakeITemplateParser{}
-		recorder = record.NewFakeRecorder(32)
+		recorder = events.NewFakeRecorder(32)
 		hostReconciler = &reconciler.HostReconciler{
 			Client:              k8sClient,
 			CmdRunner:           fakeCommandRunner,
