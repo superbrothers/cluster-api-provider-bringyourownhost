@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/docker/pkg/system"
 	"github.com/moby/go-archive"
 	. "github.com/onsi/gomega" //nolint:staticcheck
@@ -184,7 +186,9 @@ func (r *ByoHostRunner) createDockerContainer() (container.CreateResponse, error
 			SecurityOpt: []string{"seccomp=unconfined"},
 			Tmpfs:       tmpfs,
 			NetworkMode: container.NetworkMode(r.NetworkInterface),
-			Binds:       []string{"/var", "/lib/modules:/lib/modules:ro"},
+			// kubeadm reads the kernel config from /boot for its preflight
+			// check SystemVerification.
+			Binds: []string{"/var", "/lib/modules:/lib/modules:ro", "/boot:/boot:ro"},
 		},
 		&network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{r.NetworkInterface: {}}},
 		nil, r.ByoHostName)
@@ -275,6 +279,7 @@ func (r *ByoHostRunner) SetupByoDockerHost() (*container.CreateResponse, error) 
 
 	Expect(err).NotTo(HaveOccurred())
 	Expect(r.DockerClient.ContainerStart(r.Context, byohost.ID, container.StartOptions{})).NotTo(HaveOccurred())
+	r.waitForSystemd(byohost.ID)
 
 	config := cpConfig{
 		sourcePath: r.PathToHostAgentBinary,
@@ -288,6 +293,35 @@ func (r *ByoHostRunner) SetupByoDockerHost() (*container.CreateResponse, error) 
 
 	err = r.copyKubeconfig(config, listopt)
 	return &byohost, err
+}
+
+// waitForSystemd waits until systemd in the host container finishes booting.
+// The agent has to start after that: docker exec places a process in the root
+// cgroup of the container until systemd moves itself to init.scope and enables
+// the controllers for the slices, and systemd cannot enable them once a process
+// runs in the root cgroup. The kubelet then fails, as kubepods.slice has no
+// controllers.
+func (r *ByoHostRunner) waitForSystemd(containerID string) {
+	Eventually(func() (string, error) {
+		exec, err := r.DockerClient.ContainerExecCreate(r.Context, containerID, container.ExecOptions{
+			AttachStdout: true,
+			AttachStderr: true,
+			Cmd:          []string{"systemctl", "is-system-running"},
+		})
+		if err != nil {
+			return "", err
+		}
+		resp, err := r.DockerClient.ContainerExecAttach(r.Context, exec.ID, container.ExecStartOptions{})
+		if err != nil {
+			return "", err
+		}
+		defer resp.Close()
+		var stdout bytes.Buffer
+		if _, err := stdcopy.StdCopy(&stdout, io.Discard, resp.Reader); err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(stdout.String()), nil
+	}, "2m", "1s").Should(BeElementOf("running", "degraded"), "systemd in the host container %s did not finish booting", r.ByoHostName)
 }
 
 // ExecByoDockerHost runs the exec command in the byohost docker container

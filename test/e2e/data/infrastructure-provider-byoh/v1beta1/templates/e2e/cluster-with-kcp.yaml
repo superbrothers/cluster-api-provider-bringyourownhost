@@ -80,6 +80,8 @@ spec:
         criSocket: /var/run/containerd/containerd.sock
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+          # The hosts of the tests share the swap of the machine that runs them.
+          fail-swap-on: "false"
     joinConfiguration:
       nodeRegistration:
         ignorePreflightErrors:
@@ -89,6 +91,8 @@ spec:
         criSocket: /var/run/containerd/containerd.sock
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
+          # The hosts of the tests share the swap of the machine that runs them.
+          fail-swap-on: "false"
   version: ${KUBERNETES_VERSION}
 ---
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1

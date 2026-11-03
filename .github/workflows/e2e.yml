@@ -23,6 +23,11 @@ jobs:
     - name: Set netfilter conntrack max
       run: sudo sysctl -w net.netfilter.nf_conntrack_max=131072
 
+    # The hosts in containers use the inotify instances and watches of root on
+    # the runner.
+    - name: Raise the inotify limits
+      run: sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
+
     - name: Run Cluster Class e2e tests
       run: yes | GINKGO_FOCUS="\[Cluster-Class\]" make test-e2e
 
