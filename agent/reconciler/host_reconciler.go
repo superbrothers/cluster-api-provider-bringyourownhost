@@ -10,7 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/superbrothers/cluster-api-provider-bringyourownhost/agent/cloudinit"
-	"github.com/superbrothers/cluster-api-provider-bringyourownhost/agent/registration"
 	"github.com/superbrothers/cluster-api-provider-bringyourownhost/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,7 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/kube-vip/kube-vip/pkg/vip"
 	infrastructurev1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 )
 
@@ -260,11 +258,6 @@ func (r *HostReconciler) hostCleanUp(ctx context.Context, byoHost *infrastructur
 		return err
 	}
 
-	err = r.deleteEndpointIP(ctx, byoHost)
-	if err != nil {
-		return err
-	}
-
 	byoHost.Spec.InstallationSecret = nil
 	byoHost.Spec.UninstallationScript = nil
 	r.removeAnnotations(ctx, byoHost)
@@ -307,21 +300,6 @@ func (r *HostReconciler) removeSentinelFile(ctx context.Context, byoHost *infras
 	return nil
 }
 
-func (r *HostReconciler) deleteEndpointIP(ctx context.Context, byoHost *infrastructurev1beta1.ByoHost) error {
-	logger := ctrl.LoggerFrom(ctx)
-	logger.Info("Removing network endpoints")
-	if IP, ok := byoHost.Annotations[infrastructurev1beta1.EndPointIPAnnotation]; ok {
-		network, err := vip.NewConfig(IP, registration.LocalHostRegistrar.ByoHostInfo.DefaultNetworkInterfaceName, "", false, 0)
-		if err == nil {
-			err := network.DeleteIP()
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (r *HostReconciler) removeAnnotations(ctx context.Context, byoHost *infrastructurev1beta1.ByoHost) {
 	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Removing annotations")
@@ -336,9 +314,6 @@ func (r *HostReconciler) removeAnnotations(ctx context.Context, byoHost *infrast
 
 	// Remove Byomachine-name label
 	delete(byoHost.Labels, infrastructurev1beta1.AttachedByoMachineLabel)
-
-	// Remove the EndPointIP annotation
-	delete(byoHost.Annotations, infrastructurev1beta1.EndPointIPAnnotation)
 
 	// Remove the cleanup annotation
 	delete(byoHost.Annotations, infrastructurev1beta1.HostCleanupAnnotation)
