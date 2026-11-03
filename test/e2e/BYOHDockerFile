@@ -23,4 +23,8 @@ RUN for cmd in swapoff swapon; do \
 FROM scratch
 COPY --from=build / /
 
+# systemd as PID 1 ignores SIGTERM, so docker stop would wait 10 seconds and
+# kill it. SIGRTMIN+3 makes systemd shut down, as the node image of kind does.
+STOPSIGNAL SIGRTMIN+3
+
 ENTRYPOINT ["/sbin/init"]
