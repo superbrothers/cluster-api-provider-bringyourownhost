@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,10 +33,11 @@ import (
 )
 
 const (
-	KubernetesVersion = "KUBERNETES_VERSION"
-	CNIPath           = "CNI"
-	CNIResources      = "CNI_RESOURCES"
-	IPFamily          = "IP_FAMILY"
+	KubernetesVersion           = "KUBERNETES_VERSION"
+	KubernetesVersionManagement = "KUBERNETES_VERSION_MANAGEMENT"
+	CNIPath                     = "CNI"
+	CNIResources                = "CNI_RESOURCES"
+	IPFamily                    = "IP_FAMILY"
 )
 
 // Test suite flags
@@ -93,6 +96,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	Expect(configPath).To(BeAnExistingFile(), "Invalid test suite argument. e2e.config should be an existing file.")
 	Expect(os.MkdirAll(artifactFolder, 0755)).To(Succeed(), "Invalid test suite argument. Can't create e2e.artifacts-folder %q", artifactFolder)
+
+	By("Checking the kernel limits of the machine for the hosts in containers")
+	checkKernelLimits()
 
 	By("Initializing a runtime.Scheme with all the GVK relevant for this test")
 	scheme := initScheme()
@@ -160,6 +166,38 @@ func initScheme() *runtime.Scheme {
 	return sc
 }
 
+// checkKernelLimits fails the suite when the kernel limits of this machine are
+// lower than the host containers require, as they share the kernel:
+//   - kube-proxy raises nf_conntrack_max to max(32768 * CPUs, 131072) when it
+//     is lower, but it cannot write it from the network namespace of a
+//     container, and exits.
+//   - systemd, containerd and the kubelet in each host use the inotify
+//     instances and watches of root on this machine, and the kubelet exits
+//     when it cannot get one. These are the values that kind recommends.
+func checkKernelLimits() {
+	limits := []struct {
+		sysctl string
+		min    int
+	}{
+		{"net.netfilter.nf_conntrack_max", max(32768*goruntime.NumCPU(), 131072)},
+		{"fs.inotify.max_user_instances", 512},
+		{"fs.inotify.max_user_watches", 524288},
+	}
+
+	var low []string
+	for _, limit := range limits {
+		path := "/proc/sys/" + strings.ReplaceAll(limit.sysctl, ".", "/")
+		data, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred(), "Failed to read %s. For nf_conntrack_max, load the module with `sudo modprobe nf_conntrack` on this machine.", path)
+		current, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		Expect(err).NotTo(HaveOccurred(), "Failed to parse %s", path)
+		if current < limit.min {
+			low = append(low, fmt.Sprintf("%s=%d", limit.sysctl, limit.min))
+		}
+	}
+	Expect(low).To(BeEmpty(), "The kernel limits of this machine are too low for the hosts in containers. Run `sudo sysctl -w %s` on this machine.", strings.Join(low, " "))
+}
+
 func loadE2EConfig(configPath string) *clusterctl.E2EConfig {
 	config := clusterctl.LoadE2EConfig(context.TODO(), clusterctl.LoadE2EConfigInput{ConfigPath: configPath})
 	Expect(config).NotTo(BeNil(), "Failed to load E2E config from %s", configPath)
@@ -191,7 +229,7 @@ func setupBootstrapCluster(config *clusterctl.E2EConfig, scheme *runtime.Scheme,
 	if !useExistingCluster {
 		clusterProvider = bootstrap.CreateKindBootstrapClusterAndLoadImages(context.TODO(), bootstrap.CreateKindBootstrapClusterAndLoadImagesInput{
 			Name:               config.ManagementClusterName,
-			KubernetesVersion:  "v1.26.6",
+			KubernetesVersion:  config.MustGetVariable(KubernetesVersionManagement),
 			RequiresDockerSock: config.HasDockerProvider(),
 			Images:             config.Images,
 			IPFamily:           config.MustGetVariable(IPFamily),
@@ -248,9 +286,11 @@ func dumpSpecResourcesAndCleanup(ctx context.Context, specName string, clusterPr
 
 	// Dump all Cluster API related resources to artifacts before deleting them.
 	framework.DumpAllResources(ctx, framework.DumpAllResourcesInput{
-		Lister:    clusterProxy.GetClient(),
-		Namespace: namespace.Name,
-		LogPath:   filepath.Join(artifactFolder, "clusters", clusterProxy.GetName(), "resources"),
+		Lister:               clusterProxy.GetClient(),
+		KubeConfigPath:       clusterProxy.GetKubeconfigPath(),
+		ClusterctlConfigPath: clusterctlConfigPath,
+		Namespace:            namespace.Name,
+		LogPath:              filepath.Join(artifactFolder, "clusters", clusterProxy.GetName(), "resources"),
 	})
 
 	if !skipCleanup {
@@ -259,8 +299,10 @@ func dumpSpecResourcesAndCleanup(ctx context.Context, specName string, clusterPr
 		// that cluster variable is not set even if the cluster exists, so we are calling DeleteAllClustersAndWait
 		// instead of DeleteClusterAndWait
 		framework.DeleteAllClustersAndWait(ctx, framework.DeleteAllClustersAndWaitInput{
-			ClusterProxy: clusterProxy,
-			Namespace:    namespace.Name,
+			ClusterProxy:         clusterProxy,
+			ClusterctlConfigPath: clusterctlConfigPath,
+			Namespace:            namespace.Name,
+			ArtifactFolder:       artifactFolder,
 		}, intervalsGetter(specName, "wait-delete-cluster")...)
 
 		Byf("Deleting namespace used for hosting the %q test spec", specName)

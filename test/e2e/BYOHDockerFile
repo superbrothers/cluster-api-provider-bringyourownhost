@@ -11,6 +11,15 @@ RUN apt-get update \
         rsync nfs-common fuse-overlayfs curl gnupg2 \
         dbus ufw
 
+# The containers are privileged and share the swap of the machine that runs
+# them, so `swapoff -a` of the installer would turn off the swap of the
+# machine. These do nothing instead, as /usr/local/sbin comes before /usr/sbin
+# in PATH; the kubelet is told not to fail on swap.
+RUN for cmd in swapoff swapon; do \
+        printf '#!/bin/sh\n# Does nothing in the BYOH host containers of the tests.\nexit 0\n' > "/usr/local/sbin/${cmd}"; \
+        chmod 755 "/usr/local/sbin/${cmd}"; \
+    done
+
 FROM scratch
 COPY --from=build / /
 

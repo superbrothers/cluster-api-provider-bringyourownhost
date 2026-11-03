@@ -35,6 +35,7 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 		dockerClient        *client.Client
 		err                 error
 		byohostContainerIDs []string
+		loadBalancerID      string
 		agentLogFile1       = "/tmp/host-agent1.log"
 		agentLogFile2       = "/tmp/host-agent2.log"
 		byoHostName1        = "byohost1"
@@ -80,6 +81,8 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 		}
 
 		var output types.HijackedResponse
+		// The cluster templates select the hosts by the label of the role.
+		runner.CommandArgs["--label"] = "role=control-plane"
 		runner.ByoHostName = byoHostName1
 		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
 		byohost, err := runner.SetupByoDockerHost()
@@ -96,6 +99,7 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 			}
 		}()
 
+		runner.CommandArgs["--label"] = "role=worker"
 		runner.ByoHostName = byoHostName2
 		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
 		byohost, err = runner.SetupByoDockerHost()
@@ -114,7 +118,7 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 			}
 		}()
 
-		setControlPlaneIP(context.Background(), dockerClient)
+		loadBalancerID = StartControlPlaneLoadBalancer(ctx, dockerClient, runner.NetworkInterface, clusterName+"-lb", []string{byoHostName1})
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -154,6 +158,11 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 				err = dockerClient.ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
 				Expect(err).NotTo(HaveOccurred())
 			}
+		}
+		// The cluster is deleted, so the load balancer is no longer used.
+		if dockerClient != nil && loadBalancerID != "" {
+			err := dockerClient.ContainerRemove(ctx, loadBalancerID, container.RemoveOptions{Force: true})
+			Expect(err).NotTo(HaveOccurred())
 		}
 
 		err := os.Remove(agentLogFile1)
