@@ -28,16 +28,40 @@ jobs:
     - name: Verify the systemd unit of containerd in the installer
       run: make verify-containerd-service
 
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    # The test job does not regenerate these files, so that the committed ones
+    # are tested; check here that they are up to date instead.
+    - name: Verify the generated files and the format
+      run: |
+        make generate manifests cluster-templates cluster-templates-e2e fmt
+        git diff --exit-code
+        if [ -n "$(git status --porcelain)" ]; then
+          git status --porcelain
+          echo "::error::The generators created files that are not committed."
+          exit 1
+        fi
+
+    # golangci-lint runs only on pull requests.
+    - name: Vet
+      run: make vet
+
   build-agent:
       runs-on: ubuntu-24.04
       steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # The agent is built in a container, so this job would save an empty
+      # cache of Go first, and the other jobs would restore it.
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: build agent
         run: make host-agent-binaries
@@ -70,5 +94,6 @@ jobs:
     - name: Install prequisit packages
       run: sudo apt update && sudo apt install -qq --yes socat ebtables ethtool conntrack
 
-    - name: Run test make target
-      run: make test
+    # The verify job checks the generated files, the format and vet.
+    - name: Run the tests
+      run: make test-coverage
