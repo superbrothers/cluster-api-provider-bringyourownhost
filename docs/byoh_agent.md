@@ -11,7 +11,11 @@ Below flags are supported by the BYOH agent:-
 ```
 --bootstrap-kubeconfig string           
 ```
-Path to a bootstrap token kubeconfig to enable the bootstrap flow.
+Path to a bootstrap token kubeconfig to enable the bootstrap flow. See [host registration and permissions](host_registration.md) for the bootstrap flow and what the host can do after it.
+```
+--certExpiryDuration int
+```
+Duration in seconds of the certificate that the agent requests for the host (default `31536000`, 365 days). See [certificate lifetime and renewal](host_registration.md#certificate-lifetime-and-renewal).
 ```
 --label labelFlags       
 ```

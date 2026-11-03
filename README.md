@@ -30,6 +30,9 @@ __BYOH__ is a Cluster API Infrastructure Provider for already-provisioned hosts 
 ## Getting Started
 Check out the [getting_started](docs/getting_started.md) guide for launching a BYOH workload cluster
 
+## Host Registration and Permissions
+Check out [host registration and permissions](docs/host_registration.md) for how the hosts join the management cluster, what they can do there, and how to operate them securely.
+
 ## Project Status
 
 This project is currently a work-in-progress, in an Alpha state, so it may not be production ready. There is no backwards-compatibility guarantee at this point. For more details on the roadmap and upcoming features, check out the project's [issue](https://github.com/superbrothers/cluster-api-provider-bringyourownhost/issues) tracker on GitHub.

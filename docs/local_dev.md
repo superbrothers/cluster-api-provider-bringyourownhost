@@ -86,26 +86,32 @@ APISERVER=$(kubectl config view -ojsonpath='{.clusters[0].cluster.server}')
 CA_CERT=$(kubectl config view --flatten -ojsonpath='{.clusters[0].cluster.certificate-authority-data}')
 ```
 
-Create a BootstrapKubeconfig CR as follows
+Each host needs its own bootstrap kubeconfig, and it must be used within 30 minutes, as the bootstrap token in it expires then. See [Host registration and permissions](host_registration.md) for how the hosts join the management cluster and what they can do there.
+
+Create a BootstrapKubeconfig CR for each of the n hosts, where ```n>1```, as follows
 ```shell
+for i in {1..n}
+do
 cat <<EOF | kubectl apply -f -
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: BootstrapKubeconfig
 metadata:
-  name: bootstrap-kubeconfig
+  name: bootstrap-kubeconfig-host$i
   namespace: default
 spec:
   apiserver: "$APISERVER"
   certificate-authority-data: "$CA_CERT"
 EOF
+done
 ```
 
-Once the BootstrapKubeconfig CR is created, fetch the object to copy the bootstrap kubeconfig file details from the Status field
+Once the BootstrapKubeconfig CRs are created, fetch the bootstrap kubeconfig files from their Status field
 ```shell
-kubectl get bootstrapkubeconfig bootstrap-kubeconfig -n default -o=jsonpath='{.status.bootstrapKubeconfigData}' > ~/bootstrap-kubeconfig.conf
+for i in {1..n}
+do
+kubectl get bootstrapkubeconfig bootstrap-kubeconfig-host$i -n default -o=jsonpath='{.status.bootstrapKubeconfigData}' > ~/bootstrap-kubeconfig-host$i.conf
+done
 ```
-
-We need one bootstrap-kubeconfig per host. Create as many bootstrap-kubeconfig files as there are number of hosts (2 for this guide)
 
 
 ### Add a minimum of two hosts to the capacity pool
@@ -113,7 +119,7 @@ We need one bootstrap-kubeconfig per host. Create as many bootstrap-kubeconfig f
 Create Management Cluster kubeconfig
 ```shell
 export KIND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kind-control-plane)
-sed -i 's/    server\:.*/    server\: https\:\/\/'"$KIND_IP"'\:6443/g' ~/bootstrap-kubeconfig.conf
+sed -i 's/    server\:.*/    server\: https\:\/\/'"$KIND_IP"'\:6443/g' ~/bootstrap-kubeconfig-host*.conf
 ```
 Generate host-agent binaries
 ```
@@ -134,7 +140,7 @@ docker run --detach --tty --hostname host$i --name host$i --privileged --securit
 echo "Copy agent binary to host $i"
 docker cp bin/byoh-hostagent-linux-amd64 host$i:/byoh-hostagent
 echo "Copy kubeconfig to host $i"
-docker cp ~/bootstrap-kubeconfig.conf host$i:/bootstrap-kubeconfig.conf
+docker cp ~/bootstrap-kubeconfig-host$i.conf host$i:/bootstrap-kubeconfig.conf
 done
 ```
 
