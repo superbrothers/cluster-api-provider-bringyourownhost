@@ -12,8 +12,6 @@ import (
 const (
 	// HostCleanupAnnotation annotation used to mark a host for cleanup
 	HostCleanupAnnotation = "byoh.infrastructure.cluster.x-k8s.io/unregistering"
-	// EndPointIPAnnotation annotation used to store the IP address of the endpoint
-	EndPointIPAnnotation = "byoh.infrastructure.cluster.x-k8s.io/endpointip"
 	// K8sVersionAnnotation annotation used to store the k8s version
 	K8sVersionAnnotation = "byoh.infrastructure.cluster.x-k8s.io/k8sversion"
 	// AttachedByoMachineLabel label used to mark a node name attached to a byo host

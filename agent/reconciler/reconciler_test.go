@@ -555,7 +555,6 @@ runCmd:
 				Expect(updatedByoHost.Labels).NotTo(HaveKey(clusterv1.ClusterNameLabel))
 				Expect(updatedByoHost.Status.MachineRef).To(BeNil())
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.HostCleanupAnnotation))
-				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.EndPointIPAnnotation))
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.K8sVersionAnnotation))
 
 				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)

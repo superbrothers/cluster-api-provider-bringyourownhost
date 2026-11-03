@@ -567,7 +567,6 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	if host.Annotations == nil {
 		host.Annotations = make(map[string]string)
 	}
-	host.Annotations[infrav1.EndPointIPAnnotation] = machineScope.Cluster.Spec.ControlPlaneEndpoint.Host
 	host.Annotations[infrav1.K8sVersionAnnotation] = strings.Split(machineScope.Machine.Spec.Version, "+")[0]
 
 	// Claim the host with the labels, with optimistic locking: the patch fails
