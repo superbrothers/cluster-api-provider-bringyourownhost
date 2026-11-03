@@ -159,8 +159,12 @@ controller-test: $(GINKGO) $(SETUP_ENVTEST) ## Run controller tests
 webhook-test: $(GINKGO) $(SETUP_ENVTEST) ## Run webhook tests
 	$(ENVTEST_ASSETS) $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
 
+_SKIP_ARGS := $(if $(GINKGO_SKIP),-skip="$(GINKGO_SKIP)")
+
+# The test framework of Cluster API runs kustomize for the provider from
+# config/default.
 test-e2e: take-user-input docker-build prepare-byoh-docker-host-image $(GINKGO) cluster-templates-e2e ## Run the end-to-end tests
-	$(GINKGO) -v -trace -tags=e2e -focus="$(GINKGO_FOCUS)" $(_SKIP_ARGS) -nodes=$(GINKGO_NODES) --noColor=$(GINKGO_NOCOLOR) $(GINKGO_ARGS) test/e2e -- \
+	CAPI_KUSTOMIZE_PATH=$(KUSTOMIZE) $(GINKGO) -v -trace -tags=e2e -focus="$(GINKGO_FOCUS)" $(_SKIP_ARGS) -nodes=$(GINKGO_NODES) --no-color=$(GINKGO_NOCOLOR) $(GINKGO_ARGS) test/e2e -- \
 	    -e2e.artifacts-folder="$(ARTIFACTS)" \
 	    -e2e.config="$(E2E_CONF_FILE)" \
 	    -e2e.skip-resource-cleanup=$(SKIP_RESOURCE_CLEANUP) -e2e.use-existing-cluster=$(USE_EXISTING_CLUSTER) \
