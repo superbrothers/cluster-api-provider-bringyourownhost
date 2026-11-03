@@ -61,7 +61,9 @@ SHELL = /usr/bin/env bash -o pipefail
 all: build
 
 HOST_AGENT_DIR ?= agent
-HOST_AGENT_ARCHS ?= amd64 arm64
+# The architectures to build the manager image and the host agent for.
+ALL_ARCH ?= amd64 arm64
+HOST_AGENT_ARCHS ?= $(ALL_ARCH)
 
 ##@ General
 
@@ -126,11 +128,22 @@ build: generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager for the platform of this machine.
 	docker build --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+
+empty :=
+space := $(empty) $(empty)
+comma := ,
+# The platforms of the multi-platform image, linux/<arch> for each of ALL_ARCH.
+IMAGE_PLATFORMS ?= $(subst $(space),$(comma),$(addprefix linux/,$(ALL_ARCH)))
+# Set to true to push the multi-platform image to the registry of IMG.
+DOCKER_BUILDX_PUSH ?= false
+
+docker-buildx: ## Build docker image with the manager for all the platforms in ALL_ARCH, and push it if DOCKER_BUILDX_PUSH is true.
+	docker buildx build --platform $(IMAGE_PLATFORMS) --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} $(if $(filter true,$(DOCKER_BUILDX_PUSH)),--push) .
 
 prepare-byoh-docker-host-image:
 	docker build test/e2e -f test/e2e/BYOHDockerFile -t ${BYOH_BASE_IMG}

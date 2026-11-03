@@ -1,7 +1,10 @@
 # Build the manager binary
 # GO_VERSION is passed by "make docker-build" from the toolchain directive in go.mod.
 ARG GO_VERSION
-FROM golang:${GO_VERSION} AS builder
+# The builder runs on the platform of the machine that builds the image and
+# cross-compiles the manager for the target platform, so that images for other
+# architectures build without emulation.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -19,8 +22,11 @@ COPY controllers/ controllers/
 COPY installer/ installer/
 COPY common/ common/
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
+# Build for the target platform, which BuildKit sets from --platform and
+# defaults to the platform of the machine.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
