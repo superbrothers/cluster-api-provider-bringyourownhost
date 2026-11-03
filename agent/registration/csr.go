@@ -32,8 +32,9 @@ const (
 	// ExpirationSeconds defines the expiry time for Certificates
 	// which is currently set to 1 year aligned with kubeadm defaults.
 	ExpirationSeconds = 86400 * 365
-	ByohCSROrg        = "byoh:hosts"
-	ByohCSRCNFormat   = "byoh:host:%s"
+	// ByoAdmission approves only the CSRs of this organization and common name.
+	ByohCSROrg        = infrastructurev1beta1.HostsGroup
+	ByohCSRCNFormat   = infrastructurev1beta1.HostUsernamePrefix + "%s"
 	ByohCSRNameFormat = "byoh-csr-%s"
 	TmpPrivateKey     = "byoh-client.key.tmp"
 	DefaultConfigPath = ".byoh/config"
