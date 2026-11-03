@@ -29,13 +29,13 @@ func NewByoHostValidator(scheme *runtime.Scheme) *ByoHostValidator {
 }
 
 const (
-	// hostsGroup is the group of the agents. An agent authenticates with the
+	// HostsGroup is the group of the agents. An agent authenticates with the
 	// client certificate that it gets for this group from a CSR
 	// (agent/registration/csr.go).
-	hostsGroup = "byoh:hosts"
-	// hostUsernamePrefix is the prefix of the username of an agent, which is
+	HostsGroup = "byoh:hosts"
+	// HostUsernamePrefix is the prefix of the username of an agent, which is
 	// followed by the name of its host, and so of its ByoHost.
-	hostUsernamePrefix = "byoh:host:"
+	HostUsernamePrefix = "byoh:host:"
 )
 
 // Handle handles all the requests for ByoHost resource
@@ -63,13 +63,13 @@ func (v *ByoHostValidator) handleCreateUpdate(req *admission.Request) admission.
 	}
 	// Leave the requests of the other users, such as the manager, the
 	// administrators and clusterctl, to RBAC.
-	if !slices.Contains(req.UserInfo.Groups, hostsGroup) {
+	if !slices.Contains(req.UserInfo.Groups, HostsGroup) {
 		return admission.Allowed("")
 	}
 	// An agent can create and update only the ByoHost of its own host.
 	userName := req.UserInfo.Username
-	if userName != hostUsernamePrefix+byoHost.Name {
-		return admission.Denied(fmt.Sprintf("%s cannot create/update ByoHost %s: a member of %s can create/update only the ByoHost named after its username %s<name>", userName, byoHost.Name, hostsGroup, hostUsernamePrefix))
+	if userName != HostUsernamePrefix+byoHost.Name {
+		return admission.Denied(fmt.Sprintf("%s cannot create/update ByoHost %s: a member of %s can create/update only the ByoHost named after its username %s<name>", userName, byoHost.Name, HostsGroup, HostUsernamePrefix))
 	}
 	return admission.Allowed("")
 }

@@ -7,9 +7,9 @@ roleRef:
   kind: ClusterRole
   name: byoh-csr-creator-clusterrole
 subjects:
+# Only the bootstrap tokens of BYOH create the CSRs of the hosts. The agents
+# renew their certificates with the bootstrap tokens too, and ByoAdmission
+# denies the CSRs from the other users.
 - apiGroup: rbac.authorization.k8s.io
   kind: Group
   name: system:bootstrappers:byoh
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: byoh:hosts

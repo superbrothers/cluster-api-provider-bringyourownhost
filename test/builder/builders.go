@@ -9,6 +9,8 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"net"
+	"net/url"
 
 	infrastructurev1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	certv1 "k8s.io/api/certificates/v1"
@@ -435,8 +437,17 @@ func (n *NamespaceBuilder) Build() *corev1.Namespace {
 type CertificateSigningRequestBuilder struct {
 	name        string
 	cn          string
-	org         string
+	orgs        []string
 	privKeySize int
+	signerName  string
+	usages      []certv1.KeyUsage
+	dnsNames    []string
+	ipAddresses []net.IP
+	emails      []string
+	uris        []*url.URL
+	extraNames  []pkix.AttributeTypeAndValue
+	username    string
+	groups      []string
 }
 
 // CertificateSigningRequest returns a CertificateSigningRequestBuilder with the given name, cn, org and privKeySize
@@ -444,9 +455,68 @@ func CertificateSigningRequest(name, cn, org string, privKeySize int) *Certifica
 	return &CertificateSigningRequestBuilder{
 		name:        name,
 		cn:          cn,
-		org:         org,
+		orgs:        []string{org},
 		privKeySize: privKeySize,
+		signerName:  certv1.KubeAPIServerClientSignerName,
+		usages:      []certv1.KeyUsage{certv1.UsageClientAuth},
 	}
+}
+
+// WithOrganizations sets the organizations of the subject
+func (csrb *CertificateSigningRequestBuilder) WithOrganizations(orgs ...string) *CertificateSigningRequestBuilder {
+	csrb.orgs = orgs
+	return csrb
+}
+
+// WithSignerName sets the signer name
+func (csrb *CertificateSigningRequestBuilder) WithSignerName(signerName string) *CertificateSigningRequestBuilder {
+	csrb.signerName = signerName
+	return csrb
+}
+
+// WithUsages sets the usages
+func (csrb *CertificateSigningRequestBuilder) WithUsages(usages ...certv1.KeyUsage) *CertificateSigningRequestBuilder {
+	csrb.usages = usages
+	return csrb
+}
+
+// WithDNSNames sets the DNS subject alternative names
+func (csrb *CertificateSigningRequestBuilder) WithDNSNames(dnsNames ...string) *CertificateSigningRequestBuilder {
+	csrb.dnsNames = dnsNames
+	return csrb
+}
+
+// WithIPAddresses sets the IP subject alternative names
+func (csrb *CertificateSigningRequestBuilder) WithIPAddresses(ipAddresses ...net.IP) *CertificateSigningRequestBuilder {
+	csrb.ipAddresses = ipAddresses
+	return csrb
+}
+
+// WithEmailAddresses sets the email subject alternative names
+func (csrb *CertificateSigningRequestBuilder) WithEmailAddresses(emails ...string) *CertificateSigningRequestBuilder {
+	csrb.emails = emails
+	return csrb
+}
+
+// WithURIs sets the URI subject alternative names
+func (csrb *CertificateSigningRequestBuilder) WithURIs(uris ...*url.URL) *CertificateSigningRequestBuilder {
+	csrb.uris = uris
+	return csrb
+}
+
+// WithExtraNames adds the attributes to the subject. An attribute replaces
+// the organization or the common name of the builder that has the same type.
+func (csrb *CertificateSigningRequestBuilder) WithExtraNames(extraNames ...pkix.AttributeTypeAndValue) *CertificateSigningRequestBuilder {
+	csrb.extraNames = extraNames
+	return csrb
+}
+
+// WithRequester sets the username and the groups of the requester, which the
+// API server sets from the user that creates the CSR
+func (csrb *CertificateSigningRequestBuilder) WithRequester(username string, groups ...string) *CertificateSigningRequestBuilder {
+	csrb.username = username
+	csrb.groups = groups
+	return csrb
 }
 
 // Build returns a certv1.CertificateSigningRequest with the attributes added to the CertificateSigningRequestBuilder
@@ -458,9 +528,14 @@ func (csrb *CertificateSigningRequestBuilder) Build() (*certv1.CertificateSignin
 	// Generate a new *x509.CertificateRequest template
 	csrTemplate := x509.CertificateRequest{
 		Subject: pkix.Name{
-			Organization: []string{csrb.org},
+			Organization: csrb.orgs,
 			CommonName:   csrb.cn,
+			ExtraNames:   csrb.extraNames,
 		},
+		DNSNames:       csrb.dnsNames,
+		IPAddresses:    csrb.ipAddresses,
+		EmailAddresses: csrb.emails,
+		URIs:           csrb.uris,
 	}
 
 	// Generate the CSR bytes
@@ -477,8 +552,10 @@ func (csrb *CertificateSigningRequestBuilder) Build() (*certv1.CertificateSignin
 		},
 		Spec: certv1.CertificateSigningRequestSpec{
 			Request:    pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrData}),
-			SignerName: certv1.KubeAPIServerClientSignerName,
-			Usages:     []certv1.KeyUsage{certv1.UsageClientAuth},
+			SignerName: csrb.signerName,
+			Usages:     csrb.usages,
+			Username:   csrb.username,
+			Groups:     csrb.groups,
 		},
 	}
 	return csr, nil
