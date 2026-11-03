@@ -91,26 +91,32 @@ APISERVER=$(kubectl config view -ojsonpath='{.clusters[0].cluster.server}')
 CA_CERT=$(kubectl config view --flatten -ojsonpath='{.clusters[0].cluster.certificate-authority-data}')
 ```
 
-Create a BootstrapKubeconfig CR as follows
+Each host needs its own bootstrap kubeconfig, and it must be used within 30 minutes, as the bootstrap token in it expires then. See [Host registration and permissions](host_registration.md) for how the hosts join the management cluster and what they can do there.
+
+Create a BootstrapKubeconfig CR for each host (2 for this guide) as follows
 ```shell
+for i in {1..2}
+do
 cat <<EOF | kubectl apply -f -
 apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
 kind: BootstrapKubeconfig
 metadata:
-  name: bootstrap-kubeconfig
+  name: bootstrap-kubeconfig-host$i
   namespace: default
 spec:
   apiserver: "$APISERVER"
   certificate-authority-data: "$CA_CERT"
 EOF
+done
 ```
 
-Once the BootstrapKubeconfig CR is created, fetch the object to copy the bootstrap kubeconfig file details from the Status field
+Once the BootstrapKubeconfig CRs are created, fetch the bootstrap kubeconfig files from their Status field
 ```shell
-kubectl get bootstrapkubeconfig bootstrap-kubeconfig -n default -o=jsonpath='{.status.bootstrapKubeconfigData}' > ~/bootstrap-kubeconfig.conf
+for i in {1..2}
+do
+kubectl get bootstrapkubeconfig bootstrap-kubeconfig-host$i -n default -o=jsonpath='{.status.bootstrapKubeconfigData}' > ~/bootstrap-kubeconfig-host$i.conf
+done
 ```
-
-We need one bootstrap-kubeconfig per host. Create as many bootstrap-kubeconfig files as there are number of hosts (2 for this guide)
 
 ---
 ### VM Prerequisites
@@ -138,7 +144,7 @@ $ cat /etc/hosts
 
 If you are trying this on your own hosts, then for each host
 1. Download the [byoh-hostagent-linux-amd64](https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/releases/download/v0.3.0/byoh-hostagent-linux-amd64)
-2. Copy the bootstrap-kubeconfig file as `bootstrap-kubeconfig.conf`
+2. Copy the bootstrap kubeconfig file of the host (for example `~/bootstrap-kubeconfig-host1.conf`) as `bootstrap-kubeconfig.conf`
 3. Start the agent with the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label.
 ```shell
 ./byoh-hostagent-linux-amd64 --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=control-plane > byoh-agent.log 2>&1 &
@@ -149,7 +155,7 @@ If you are trying this using the docker containers we started above, then we wou
 
 ```shell
 export KIND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kind-control-plane)
-sed -i 's/    server\:.*/    server\: https\:\/\/'"$KIND_IP"'\:6443/g' ~/bootstrap-kubeconfig.conf
+sed -i 's/    server\:.*/    server\: https\:\/\/'"$KIND_IP"'\:6443/g' ~/bootstrap-kubeconfig-host*.conf
 ```
 Assuming you have downloaded the `byoh-hostagent-linux-amd64` into your working directory, you can use the following script to start the agent on the containers.
 
@@ -159,7 +165,7 @@ do
 echo "Copy agent binary to host $i"
 docker cp byoh-hostagent-linux-amd64 host$i:/byoh-hostagent
 echo "Copy kubeconfig to host $i"
-docker cp ~/bootstrap-kubeconfig.conf host$i:/bootstrap-kubeconfig.conf
+docker cp ~/bootstrap-kubeconfig-host$i.conf host$i:/bootstrap-kubeconfig.conf
 done
 ```
 
