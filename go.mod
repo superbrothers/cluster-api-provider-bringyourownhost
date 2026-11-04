@@ -5,6 +5,7 @@ go 1.26.0
 toolchain go1.26.10
 
 require (
+	github.com/containerd/errdefs v1.0.0
 	github.com/docker/cli v28.5.2+incompatible
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/go-logr/logr v1.4.4
@@ -47,7 +48,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.6.0 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
