@@ -1,15 +1,15 @@
 # Ensure Make is run with bash shell as some syntax below is bash-specific
 SHELL:=/usr/bin/env bash
 
-# Define registries
-STAGING_REGISTRY ?= gcr.io/k8s-staging-cluster-api
+# The registry of the image of the manager
+REGISTRY ?= ghcr.io/superbrothers
 
 IMAGE_NAME ?= cluster-api-byoh-controller
 TAG ?= dev
 RELEASE_DIR := _dist
 
 # Image URL to use all building/pushing image targets
-IMG ?= ${STAGING_REGISTRY}/${IMAGE_NAME}:${TAG}
+IMG ?= ${REGISTRY}/${IMAGE_NAME}:${TAG}
 BYOH_BASE_IMG = byoh/node:e2e
 BYOH_BASE_IMG_DEV = byoh/node:dev
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -230,14 +230,14 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/superbrothers/cluster-api-byoh-controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
 publish-infra-yaml:kustomize # Generate infrastructure-components.yaml for the provider
-	cd config/manager && $(KUSTOMIZE) edit set image gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/superbrothers/cluster-api-byoh-controller=${IMG}
 	$(KUSTOMIZE) build config/default > infrastructure-components.yaml
 
 CONTROLLER_GEN_VER := v0.21.0
@@ -292,7 +292,7 @@ build-cluster-templates: $(RELEASE_DIR) cluster-templates
 
 
 build-infra-yaml:kustomize ## Generate infrastructure-components.yaml for the provider
-	cd config/manager && $(KUSTOMIZE) edit set image gcr.io/k8s-staging-cluster-api/cluster-api-byoh-controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image ghcr.io/superbrothers/cluster-api-byoh-controller=${IMG}
 	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
 
 build-metadata-yaml:
