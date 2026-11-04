@@ -58,12 +58,14 @@ Next, create a tilt-settings.json file and place it in your local copy of cluste
 ```shell
 cat > tilt-settings.json <<EOF
 {
-  "default_registry": "gcr.io/k8s-staging-cluster-api",
+  "default_registry": "ghcr.io/<your-github-account>",
   "enable_providers": ["byoh", "kubeadm-bootstrap", "kubeadm-control-plane"],
   "provider_repos": ["../cluster-api-provider-bringyourownhost"]
 }
 EOF
 ```
+
+`default_registry` is the registry that Tilt pushes the images to, so set one that you can push to. Do not set `ghcr.io/superbrothers`, where the released images are. The Tiltfile of Cluster API does not need it when the kind cluster has a local registry, as described in [Developing Cluster API with Tilt](https://cluster-api.sigs.k8s.io/developer/core/tilt).
 
 __Run Tilt__
 
