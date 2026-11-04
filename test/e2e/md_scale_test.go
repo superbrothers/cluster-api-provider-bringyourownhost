@@ -10,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -24,16 +22,12 @@ import (
 var _ = Describe("When testing MachineDeployment scale out/in", func() {
 
 	var (
-		ctx                    context.Context
-		specName               = "md-scale"
-		namespace              *corev1.Namespace
-		cancelWatches          context.CancelFunc
-		clusterResources       *clusterctl.ApplyClusterTemplateAndWaitResult
-		dockerClient           *client.Client
-		byoHostCapacityPool    = 6
-		byoHostName            string
-		allbyohostContainerIDs []string
-		allAgentLogFiles       []string
+		ctx              context.Context
+		specName         = "md-scale"
+		namespace        *corev1.Namespace
+		cancelWatches    context.CancelFunc
+		clusterResources *clusterctl.ApplyClusterTemplateAndWaitResult
+		hosts            *byoHosts
 	)
 
 	BeforeEach(func() {
@@ -50,59 +44,26 @@ var _ = Describe("When testing MachineDeployment scale out/in", func() {
 		// set up a Namespace where to host objects for this spec and create a watcher for the namespace events.
 		namespace, cancelWatches = setupSpecNamespace(ctx, specName, bootstrapClusterProxy, artifactFolder)
 		clusterResources = new(clusterctl.ApplyClusterTemplateAndWaitResult)
+		hosts = newByoHosts(ctx)
 	})
 
 	It("Should successfully scale a MachineDeployment up and down upon changes to the MachineDeployment replica count", func() {
 		clusterName := fmt.Sprintf("%s-%s", specName, util.RandomString(6))
 
-		dClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		dockerClient = dClient
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Creating byohost capacity pool containing 5 hosts")
-		for i := 0; i < byoHostCapacityPool; i++ {
-
-			byoHostName = fmt.Sprintf("byohost-%s", util.RandomString(6))
-
-			runner := ByoHostRunner{
-				Context:               ctx,
-				clusterConName:        clusterConName,
-				ByoHostName:           byoHostName,
-				Namespace:             namespace.Name,
-				PathToHostAgentBinary: pathToHostAgentBinary,
-				DockerClient:          dockerClient,
-				NetworkInterface:      "kind",
-				bootstrapClusterProxy: bootstrapClusterProxy,
-				CommandArgs: map[string]string{
-					"--bootstrap-kubeconfig": "/bootstrap.conf",
-					"--namespace":            namespace.Name,
-					"--v":                    "1",
-				},
-			}
-			runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-			byohost, err := runner.SetupByoDockerHost()
-			Expect(err).NotTo(HaveOccurred())
-			output, byohostContainerID, err := runner.ExecByoDockerHost(byohost)
-			allbyohostContainerIDs = append(allbyohostContainerIDs, byohostContainerID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// read the log of host agent container in backend, and write it
-			agentLogFile := fmt.Sprintf("/tmp/host-agent-%d.log", i)
-
-			f := WriteDockerLog(output, agentLogFile)
-			defer func() {
-				deferredErr := f.Close()
-				if deferredErr != nil {
-					Showf("error closing file %s:, %v", agentLogFile, deferredErr)
-				}
-			}()
-			allAgentLogFiles = append(allAgentLogFiles, agentLogFile)
+		// The cluster has 3 control plane machines, and the MachineDeployment
+		// scales out to 3 machines.
+		By("Creating byohost capacity pool containing 3 control plane hosts and 3 worker hosts")
+		var pool []byoHost
+		for range 3 {
+			pool = append(pool,
+				byoHost{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
+				byoHost{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: workerRole},
+			)
 		}
-		// TODO: Write agent logs to files for better debugging
+		hosts.Start(ctx, namespace.Name, pool)
 
-		By("creating a workload cluster with one control plane node and one worker node")
+		By("creating a workload cluster with three control plane nodes and one worker node")
 
-		setControlPlaneIP(context.Background(), dockerClient)
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -149,32 +110,16 @@ var _ = Describe("When testing MachineDeployment scale out/in", func() {
 	})
 
 	JustAfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
-			ShowInfo(allAgentLogFiles)
+		if CurrentSpecReport().Failed() {
+			ShowInfo(hosts.LogFiles())
 		}
 	})
 
 	AfterEach(func() {
 		// Dumps all the resources in the spec namespace, then cleanups the cluster object and the spec namespace itself.
+		// The hosts and the load balancer are removed after this.
 		dumpSpecResourcesAndCleanup(ctx, specName, bootstrapClusterProxy, artifactFolder, namespace, cancelWatches, clusterResources.Cluster, e2eConfig.GetIntervals, skipCleanup)
 
-		if dockerClient != nil {
-			for _, byohostContainerID := range allbyohostContainerIDs {
-				err := dockerClient.ContainerStop(ctx, byohostContainerID, container.StopOptions{})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = dockerClient.ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-		}
-
-		for _, agentLogFile := range allAgentLogFiles {
-			err := os.Remove(agentLogFile)
-			if err != nil {
-				Showf("error removing file %s: %v", agentLogFile, err)
-			}
-		}
 		err := os.Remove(ReadByohControllerManagerLogShellFile)
 		if err != nil {
 			Showf("error removing file %s: %v", ReadByohControllerManagerLogShellFile, err)
