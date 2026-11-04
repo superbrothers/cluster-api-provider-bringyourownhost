@@ -10,9 +10,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -26,20 +23,13 @@ import (
 var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 
 	var (
-		ctx                 context.Context
-		specName            = "quick-start"
-		namespace           *corev1.Namespace
-		clusterName         string
-		cancelWatches       context.CancelFunc
-		clusterResources    *clusterctl.ApplyClusterTemplateAndWaitResult
-		dockerClient        *client.Client
-		err                 error
-		byohostContainerIDs []string
-		loadBalancerID      string
-		agentLogFile1       = "/tmp/host-agent1.log"
-		agentLogFile2       = "/tmp/host-agent2.log"
-		byoHostName1        = "byohost1"
-		byoHostName2        = "byohost2"
+		ctx              context.Context
+		specName         = "quick-start"
+		namespace        *corev1.Namespace
+		clusterName      string
+		cancelWatches    context.CancelFunc
+		clusterResources *clusterctl.ApplyClusterTemplateAndWaitResult
+		hosts            *byoHosts
 	)
 
 	BeforeEach(func() {
@@ -57,68 +47,17 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 		// set up a Namespace where to host objects for this spec and create a watcher for the namespace events.
 		namespace, cancelWatches = setupSpecNamespace(ctx, specName, bootstrapClusterProxy, artifactFolder)
 		clusterResources = new(clusterctl.ApplyClusterTemplateAndWaitResult)
+		hosts = newByoHosts(ctx)
 	})
 
 	It("Should create a workload cluster with single BYOH host", func() {
 		clusterName = fmt.Sprintf("%s-%s", specName, util.RandomString(6))
 
-		dockerClient, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		Expect(err).NotTo(HaveOccurred())
+		hosts.Start(ctx, namespace.Name, []byoHost{
+			{Name: "byohost1", Role: controlPlaneRole},
+			{Name: "byohost2", Role: workerRole},
+		})
 
-		runner := ByoHostRunner{
-			Context:               ctx,
-			clusterConName:        clusterConName,
-			Namespace:             namespace.Name,
-			PathToHostAgentBinary: pathToHostAgentBinary,
-			DockerClient:          dockerClient,
-			NetworkInterface:      "kind",
-			bootstrapClusterProxy: bootstrapClusterProxy,
-			CommandArgs: map[string]string{
-				"--bootstrap-kubeconfig": "/bootstrap.conf",
-				"--namespace":            namespace.Name,
-				"--v":                    "1",
-			},
-		}
-
-		var output types.HijackedResponse
-		// The cluster templates select the hosts by the label of the role.
-		runner.CommandArgs["--label"] = "role=control-plane"
-		runner.ByoHostName = byoHostName1
-		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-		byohost, err := runner.SetupByoDockerHost()
-		Expect(err).NotTo(HaveOccurred())
-		output, byohostContainerID, err := runner.ExecByoDockerHost(byohost)
-		Expect(err).NotTo(HaveOccurred())
-		defer output.Close()
-		byohostContainerIDs = append(byohostContainerIDs, byohostContainerID)
-		f := WriteDockerLog(output, agentLogFile1)
-		defer func() {
-			deferredErr := f.Close()
-			if deferredErr != nil {
-				Showf("error closing file %s: %v", agentLogFile1, deferredErr)
-			}
-		}()
-
-		runner.CommandArgs["--label"] = "role=worker"
-		runner.ByoHostName = byoHostName2
-		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-		byohost, err = runner.SetupByoDockerHost()
-		Expect(err).NotTo(HaveOccurred())
-		output, byohostContainerID, err = runner.ExecByoDockerHost(byohost)
-		Expect(err).NotTo(HaveOccurred())
-		defer output.Close()
-		byohostContainerIDs = append(byohostContainerIDs, byohostContainerID)
-
-		// read the log of host agent container in backend, and write it
-		f = WriteDockerLog(output, agentLogFile2)
-		defer func() {
-			deferredErr := f.Close()
-			if deferredErr != nil {
-				Showf("error closing file %s: %v", agentLogFile2, deferredErr)
-			}
-		}()
-
-		loadBalancerID = StartControlPlaneLoadBalancer(ctx, dockerClient, runner.NetworkInterface, clusterName+"-lb", []string{byoHostName1})
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -141,41 +80,17 @@ var _ = Describe("When BYOH joins existing cluster [PR-Blocking]", func() {
 	})
 
 	JustAfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
-			ShowInfo([]string{agentLogFile1, agentLogFile2})
+		if CurrentSpecReport().Failed() {
+			ShowInfo(hosts.LogFiles())
 		}
 	})
 
 	AfterEach(func() {
 		// Dumps all the resources in the spec namespace, then cleanups the cluster object and the spec namespace itself.
+		// The hosts and the load balancer are removed after this.
 		dumpSpecResourcesAndCleanup(ctx, specName, bootstrapClusterProxy, artifactFolder, namespace, cancelWatches, clusterResources.Cluster, e2eConfig.GetIntervals, skipCleanup)
 
-		if dockerClient != nil && len(byohostContainerIDs) != 0 {
-			for _, byohostContainerID := range byohostContainerIDs {
-				err := dockerClient.ContainerStop(ctx, byohostContainerID, container.StopOptions{})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = dockerClient.ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
-				Expect(err).NotTo(HaveOccurred())
-			}
-		}
-		// The cluster is deleted, so the load balancer is no longer used.
-		if dockerClient != nil && loadBalancerID != "" {
-			err := dockerClient.ContainerRemove(ctx, loadBalancerID, container.RemoveOptions{Force: true})
-			Expect(err).NotTo(HaveOccurred())
-		}
-
-		err := os.Remove(agentLogFile1)
-		if err != nil {
-			Showf("error removing file %s: %v", agentLogFile1, err)
-		}
-
-		err = os.Remove(agentLogFile2)
-		if err != nil {
-			Showf("error removing file %s: %v", agentLogFile2, err)
-		}
-
-		err = os.Remove(ReadByohControllerManagerLogShellFile)
+		err := os.Remove(ReadByohControllerManagerLogShellFile)
 		if err != nil {
 			Showf("error removing file %s: %v", ReadByohControllerManagerLogShellFile, err)
 		}

@@ -10,9 +10,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	infrastructurev1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
@@ -25,21 +22,15 @@ import (
 	"sigs.k8s.io/cluster-api/util"
 )
 
-var (
-	dockerClient *client.Client
-)
-
 var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 
 	var (
-		ctx                 context.Context
-		specName            = "byohost-reuse"
-		namespace           *corev1.Namespace
-		cancelWatches       context.CancelFunc
-		clusterResources    *clusterctl.ApplyClusterTemplateAndWaitResult
-		byohostContainerIDs []string
-		agentLogFile1       = "/tmp/host-agent1.log"
-		agentLogFile2       = "/tmp/host-agent-reuse.log"
+		ctx              context.Context
+		specName         = "byohost-reuse"
+		namespace        *corev1.Namespace
+		cancelWatches    context.CancelFunc
+		clusterResources *clusterctl.ApplyClusterTemplateAndWaitResult
+		hosts            *byoHosts
 	)
 
 	BeforeEach(func() {
@@ -57,6 +48,7 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 		// set up a Namespace where to host objects for this spec and create a watcher for the namespace events.
 		namespace, cancelWatches = setupSpecNamespace(ctx, specName, bootstrapClusterProxy, artifactFolder)
 		clusterResources = new(clusterctl.ApplyClusterTemplateAndWaitResult)
+		hosts = newByoHosts(ctx)
 	})
 
 	It("Should reuse the same BYO Host after it is reset", func() {
@@ -64,63 +56,14 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 		byoHostName1 := "byohost-1"
 		byoHostName2 := "byohost-for-reuse"
 
-		client, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		Expect(err).NotTo(HaveOccurred())
-		setDockerClient(client)
-
-		runner := ByoHostRunner{
-			Context:               ctx,
-			clusterConName:        clusterConName,
-			Namespace:             namespace.Name,
-			PathToHostAgentBinary: pathToHostAgentBinary,
-			DockerClient:          dockerClient,
-			NetworkInterface:      "kind",
-			bootstrapClusterProxy: bootstrapClusterProxy,
-			CommandArgs: map[string]string{
-				"--bootstrap-kubeconfig": "/bootstrap.conf",
-				"--namespace":            namespace.Name,
-				"--v":                    "1",
-			},
-		}
-
-		var output types.HijackedResponse
-		runner.ByoHostName = byoHostName1
-		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-		byohost, err := runner.SetupByoDockerHost()
-		Expect(err).NotTo(HaveOccurred())
-		output, byohostContainerID, err := runner.ExecByoDockerHost(byohost)
-		Expect(err).NotTo(HaveOccurred())
-		defer output.Close()
-		byohostContainerIDs = append(byohostContainerIDs, byohostContainerID)
-		f := WriteDockerLog(output, agentLogFile1)
-		defer func() {
-			deferredErr := f.Close()
-			if deferredErr != nil {
-				Showf("Error closing file %s: %v", agentLogFile1, deferredErr)
-			}
-		}()
-
-		runner.ByoHostName = byoHostName2
-		runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-		byohost, err = runner.SetupByoDockerHost()
-		Expect(err).NotTo(HaveOccurred())
-		output, byohostContainerID, err = runner.ExecByoDockerHost(byohost)
-		Expect(err).NotTo(HaveOccurred())
-		defer output.Close()
-		byohostContainerIDs = append(byohostContainerIDs, byohostContainerID)
-
-		// read the log of host agent container in backend, and write it
-		f = WriteDockerLog(output, agentLogFile2)
-		defer func() {
-			deferredErr := f.Close()
-			if deferredErr != nil {
-				Showf("Error closing file %s: %v", agentLogFile2, deferredErr)
-			}
-		}()
+		// Both clusters use the same hosts and the same load balancer.
+		hosts.Start(ctx, namespace.Name, []byoHost{
+			{Name: byoHostName1, Role: controlPlaneRole},
+			{Name: byoHostName2, Role: workerRole},
+		})
 
 		By("Creating a cluster")
 
-		setControlPlaneIP(context.Background(), dockerClient)
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -150,16 +93,21 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 
 		By("Delete the cluster and freeing the ByoHosts")
 		framework.DeleteAllClustersAndWait(ctx, framework.DeleteAllClustersAndWaitInput{
-			ClusterProxy: bootstrapClusterProxy,
-			Namespace:    namespace.Name,
+			ClusterProxy:         bootstrapClusterProxy,
+			ClusterctlConfigPath: clusterctlConfigPath,
+			Namespace:            namespace.Name,
+			ArtifactFolder:       artifactFolder,
 		}, e2eConfig.GetIntervals(specName, "wait-delete-cluster")...)
 
 		// Assert if cluster label is removed
-		// This verifies that the byohost has rejoined the capacity pool
-		byoHostToBeReused = &infrastructurev1beta1.ByoHost{}
-		Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHostToBeReused)).Should(Succeed())
-		_, ok = byoHostToBeReused.Labels[clusterv1.ClusterNameLabel]
-		Expect(ok).To(BeFalse())
+		// This verifies that the byohost has rejoined the capacity pool. The
+		// agent removes the label after it resets the host, which can be after
+		// the cluster is deleted.
+		Eventually(func(g Gomega) {
+			byoHost := &infrastructurev1beta1.ByoHost{}
+			g.Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHost)).To(Succeed())
+			g.Expect(byoHost.Labels).NotTo(HaveKey(clusterv1.ClusterNameLabel))
+		}, e2eConfig.GetIntervals(specName, "wait-delete-cluster")...).Should(Succeed())
 
 		By("Creating a new cluster")
 		clusterName = fmt.Sprintf("%s-%s", specName, util.RandomString(6))
@@ -193,34 +141,17 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 	})
 
 	JustAfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
-			ShowInfo([]string{agentLogFile1, agentLogFile2})
+		if CurrentSpecReport().Failed() {
+			ShowInfo(hosts.LogFiles())
 		}
 	})
 
 	AfterEach(func() {
 		// Dumps all the resources in the spec namespace, then cleanups the cluster object and the spec namespace itself.
+		// The hosts and the load balancer are removed after this.
 		dumpSpecResourcesAndCleanup(ctx, specName, bootstrapClusterProxy, artifactFolder, namespace, cancelWatches, clusterResources.Cluster, e2eConfig.GetIntervals, skipCleanup)
 
-		if getDockerClient() != nil && len(byohostContainerIDs) != 0 {
-			for _, byohostContainerID := range byohostContainerIDs {
-				err := getDockerClient().ContainerStop(ctx, byohostContainerID, container.StopOptions{})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = getDockerClient().ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
-				Expect(err).NotTo(HaveOccurred())
-			}
-		}
-
-		err := os.Remove(agentLogFile1)
-		if err != nil {
-			Showf("Failed to remove file %s: %v", agentLogFile1, err)
-		}
-		err = os.Remove(agentLogFile2)
-		if err != nil {
-			Showf("Failed to remove file %s: %v", agentLogFile2, err)
-		}
-		err = os.Remove(ReadByohControllerManagerLogShellFile)
+		err := os.Remove(ReadByohControllerManagerLogShellFile)
 		if err != nil {
 			Showf("Failed to remove file %s: %v", ReadByohControllerManagerLogShellFile, err)
 		}
@@ -230,11 +161,3 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 		}
 	})
 })
-
-func setDockerClient(dc *client.Client) {
-	dockerClient = dc
-}
-
-func getDockerClient() *client.Client {
-	return dockerClient
-}
