@@ -212,13 +212,13 @@ var _ = Describe("ByohostWebhook", func() {
 		It("should allow the agent of the host to report its status", func() {
 			ph, err := v1beta1patch.NewHelper(byoHost, ValidUserK8sClient)
 			Expect(err).NotTo(HaveOccurred())
-			byoHost.Status.HostDetails.Architecture = "arm64"
+			byoHost.Status.HostInfo.Architecture = "arm64"
 			byoHost.Status.Network = []byohv1beta1.NetworkStatus{{NetworkInterfaceName: "eth0", IsDefault: true}}
 			Expect(ph.Patch(ctx, byoHost)).To(Succeed())
 
 			updated := &byohv1beta1.ByoHost{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: "host1"}, updated)).To(Succeed())
-			Expect(updated.Status.HostDetails.Architecture).To(Equal("arm64"))
+			Expect(updated.Status.HostInfo.Architecture).To(Equal("arm64"))
 		})
 
 		It("should not let the agents update a ByoHost other than its status with RBAC", func() {

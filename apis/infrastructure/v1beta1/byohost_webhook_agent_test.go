@@ -89,7 +89,7 @@ var _ = Describe("ByohostWebhook with the agent", func() {
 			By("registering the host")
 			Expect(registrar.Register(key.Name, key.Namespace, hostLabels)).To(Succeed())
 			byoHost := getByoHost()
-			Expect(byoHost.Status.HostDetails.OSName).NotTo(BeEmpty())
+			Expect(byoHost.Status.HostInfo.OperatingSystem).NotTo(BeEmpty())
 			Expect(byoHost.Status.AgentInfo).NotTo(BeNil())
 
 			By("reconciling the host while it is free")

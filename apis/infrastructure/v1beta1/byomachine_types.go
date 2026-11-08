@@ -56,9 +56,10 @@ type ByoMachineStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// HostInfo has the attached host platform details.
+	// HostInfo is the platform of the host that the ByoMachine is attached
+	// to, which the installer is chosen for.
 	// +optional
-	HostInfo HostInfo `json:"hostinfo,omitempty"`
+	HostInfo HostInfo `json:"hostInfo,omitempty"`
 
 	// +optional
 	Ready bool `json:"ready"`

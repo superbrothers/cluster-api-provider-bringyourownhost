@@ -89,7 +89,7 @@ func (hr *HostRegistrar) UpdateHost(ctx context.Context, byoHost *infrastructure
 	byoHost.Status.Network = hr.GetNetworkStatus()
 
 	klog.Info("Attach Host Platform details")
-	if byoHost.Status.HostDetails, err = hr.getHostInfo(); err != nil {
+	if byoHost.Status.HostInfo, err = hr.getHostInfo(); err != nil {
 		return err
 	}
 
@@ -152,7 +152,7 @@ func (hr *HostRegistrar) getHostInfo() (infrastructurev1beta1.HostInfo, error) {
 	hostInfo := infrastructurev1beta1.HostInfo{}
 
 	hostInfo.Architecture = runtime.GOARCH
-	hostInfo.OSName = runtime.GOOS
+	hostInfo.OperatingSystem = runtime.GOOS
 
 	if distribution, err := getOperatingSystem(os.ReadFile); err != nil {
 		return hostInfo, errors.Wrap(err, "failed to get host operating system image")

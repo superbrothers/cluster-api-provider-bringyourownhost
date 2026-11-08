@@ -53,7 +53,7 @@ var _ = Describe("Host Registrar Tests", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(byoHost), updated)).To(Succeed())
 			Expect(updated.Status.AgentInfo).NotTo(BeNil())
 			Expect(updated.Status.AgentInfo.Version).To(Equal("v0.6.0-rc.0"))
-			Expect(updated.Status.HostDetails.Architecture).To(Equal(runtime.GOARCH))
+			Expect(updated.Status.HostInfo.Architecture).To(Equal(runtime.GOARCH))
 		})
 
 		It("Should report a version without a release tag for an agent built without a version", func() {

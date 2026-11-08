@@ -432,7 +432,7 @@ func (in *ByoHostStatus) DeepCopyInto(out *ByoHostStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	out.HostDetails = in.HostDetails
+	out.HostInfo = in.HostInfo
 	if in.AgentInfo != nil {
 		in, out := &in.AgentInfo, &out.AgentInfo
 		*out = new(AgentInfo)

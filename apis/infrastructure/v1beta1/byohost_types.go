@@ -79,15 +79,17 @@ type LastReset struct {
 	Time metav1.Time `json:"time"`
 }
 
-// HostInfo is a set of details about the host platform.
+// HostInfo is the platform of a host, which the host agent reports. The
+// fields are named after those of the NodeSystemInfo of a Node.
 type HostInfo struct {
-	// The Operating System reported by the host.
-	OSName string `json:"osname,omitempty"`
+	// OperatingSystem is the operating system of the host, such as linux.
+	OperatingSystem string `json:"operatingSystem,omitempty"`
 
-	// OS Image reported by the host.
-	OSImage string `json:"osimage,omitempty"`
+	// OSImage is the distribution of the host, from PRETTY_NAME of
+	// /etc/os-release, such as Ubuntu 26.04 LTS.
+	OSImage string `json:"osImage,omitempty"`
 
-	// The Architecture reported by the host.
+	// Architecture is the architecture of the host, such as amd64.
 	Architecture string `json:"architecture,omitempty"`
 }
 
@@ -108,9 +110,9 @@ type ByoHostStatus struct {
 	// +optional
 	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 
-	// HostDetails returns the platform details of the host.
+	// HostInfo is the platform of the host.
 	// +optional
-	HostDetails HostInfo `json:"hostinfo,omitempty"`
+	HostInfo HostInfo `json:"hostInfo,omitempty"`
 
 	// AgentInfo is what the host agent reports about itself. It is absent
 	// until the agent reports it.
@@ -133,9 +135,8 @@ type ByoHostStatus struct {
 //+kubebuilder:resource:path=byohosts,scope=Namespaced,shortName=byoh
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="ByoMachine",type="string",JSONPath=`.spec.byoMachineRef.name`
-//+kubebuilder:printcolumn:name="OSName",type="string",JSONPath=`.status.hostinfo.osname`
-//+kubebuilder:printcolumn:name="OSImage",type="string",JSONPath=`.status.hostinfo.osimage`
-//+kubebuilder:printcolumn:name="Arch",type="string",JSONPath=`.status.hostinfo.architecture`
+//+kubebuilder:printcolumn:name="OSImage",type="string",JSONPath=`.status.hostInfo.osImage`
+//+kubebuilder:printcolumn:name="Arch",type="string",JSONPath=`.status.hostInfo.architecture`
 //+kubebuilder:printcolumn:name="AgentVersion",type="string",JSONPath=`.status.agentInfo.version`
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 

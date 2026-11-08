@@ -36,7 +36,7 @@ The controller writes the spec of a ByoHost, and the agent writes the status. BY
 | `spec.bootstrapSecret` | Controller | The Secret with the bootstrap data of the Machine |
 | `spec.installationSecret` | Controller | The Secret with the install and uninstall scripts |
 | `status.conditions` | Agent | The state of the installation, the bootstrap and the reset |
-| `status.hostinfo`, `status.network`, `status.agentInfo` | Agent | The host and the agent, reported every time the agent starts |
+| `status.hostInfo`, `status.network`, `status.agentInfo` | Agent | The host and the agent, reported every time the agent starts |
 | `status.lastReset` | Agent | The UID of the ByoMachine that the host was last reset for, and when |
 
 ## Checking the hosts
