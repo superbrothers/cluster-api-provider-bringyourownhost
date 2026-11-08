@@ -17,9 +17,9 @@ const (
 	// components are currently installed on the node.
 	K8sComponentsInstallationSucceeded clusterv1.ConditionType = "K8sComponentsInstallationSucceeded"
 
-	// WaitingForMachineRefReason indicates when a ByoHost is registered into a capacity pool and
-	// waiting for a byohost.Status.MachineRef to be assigned
-	WaitingForMachineRefReason = "WaitingForMachineRefToBeAssigned"
+	// WaitingForByoMachineRefReason indicates that a ByoHost is free, and waits
+	// for the controller to attach it to a ByoMachine in spec.byoMachineRef.
+	WaitingForByoMachineRefReason = "WaitingForByoMachineRef"
 
 	// BootstrapDataSecretUnavailableReason indicates that the bootstrap provider is yet to provide the
 	// secret that contains bootstrap information
@@ -52,6 +52,16 @@ const (
 	// K8sComponentsInstallationFailedReason indicates that the installer failed to install all the
 	// k8s components on this host
 	K8sComponentsInstallationFailedReason = "K8sComponentsInstallationFailed"
+
+	// K8sNodeResetFailedReason indicates that the host agent failed to reset
+	// the node with kubeadm reset, or to clean up the files of the bootstrap,
+	// while it resets the host for spec.resetRequested. The agent tries again.
+	K8sNodeResetFailedReason = "K8sNodeResetFailed"
+
+	// K8sComponentsUninstallationFailedReason indicates that the host agent
+	// failed to uninstall the k8s components while it resets the host for
+	// spec.resetRequested. The agent tries again.
+	K8sComponentsUninstallationFailedReason = "K8sComponentsUninstallationFailed"
 )
 
 // Conditions and Reasons defined on BYOMachine
@@ -75,6 +85,10 @@ const (
 	// InstallationSecretNotAvailableReason indicates that the installation secret is not yet
 	// generated for a given BYOMachine
 	InstallationSecretNotAvailableReason = "InstallationSecretNotAvailable"
+
+	// WaitingForHostResetReason indicates that a deleted ByoMachine waits for
+	// the host agent to reset the host that the ByoMachine is attached to.
+	WaitingForHostResetReason = "WaitingForHostReset"
 )
 
 // Reasons common to all Byo Resources

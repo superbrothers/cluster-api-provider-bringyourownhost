@@ -5,11 +5,12 @@ package v1beta1_test
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	byohv1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
-	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubectl/pkg/scheme"
@@ -44,7 +45,7 @@ var _ = Describe("ByohostWebhook", func() {
 			Expect(err).To(BeNil())
 		})
 
-		Context("When ByoHost has MachineRef assigned", func() {
+		Context("When ByoHost is attached to a ByoMachine", func() {
 			var (
 				byoMachine        *byohv1beta1.ByoMachine
 				k8sClientUncached client.Client
@@ -66,14 +67,12 @@ var _ = Describe("ByohostWebhook", func() {
 				}
 				Expect(k8sClientUncached.Create(ctx, byoMachine)).Should(Succeed())
 
-				ph, err := v1beta1patch.NewHelper(byoHost, ValidUserK8sClient)
+				// The controller attaches the ByoHost.
+				ph, err := v1beta1patch.NewHelper(byoHost, k8sClientUncached)
 				Expect(err).ShouldNot(HaveOccurred())
-				byoHost.Status.MachineRef = &corev1.ObjectReference{
-					Kind:       "ByoMachine",
-					Namespace:  byoMachine.Namespace,
-					Name:       byoMachine.Name,
-					UID:        byoMachine.UID,
-					APIVersion: byoHost.APIVersion,
+				byoHost.Spec.ByoMachineRef = &byohv1beta1.ByoMachineReference{
+					Name: byoMachine.Name,
+					UID:  byoMachine.UID,
 				}
 				Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 			})
@@ -81,14 +80,14 @@ var _ = Describe("ByohostWebhook", func() {
 			It("should reject the request", func() {
 				err := ValidUserK8sClient.Delete(ctx, byoHost)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError("admission webhook \"vbyohost.kb.io\" denied the request: cannot delete ByoHost when MachineRef is assigned"))
+				Expect(err).To(MatchError(fmt.Sprintf("admission webhook \"vbyohost.kb.io\" denied the request: cannot delete ByoHost %s while it is attached to ByoMachine %s (spec.byoMachineRef)", byoHost.Name, byoMachine.Name)))
 			})
 
 			AfterEach(func() {
 				// delete the byohost resource
-				ph, err := v1beta1patch.NewHelper(byoHost, ValidUserK8sClient)
+				ph, err := v1beta1patch.NewHelper(byoHost, k8sClientUncached)
 				Expect(err).ShouldNot(HaveOccurred())
-				byoHost.Status.MachineRef = nil
+				byoHost.Spec.ByoMachineRef = nil
 				Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 				Expect(ValidUserK8sClient.Delete(ctx, byoHost)).Should(Succeed())
 			})
@@ -157,21 +156,22 @@ var _ = Describe("ByohostWebhook", func() {
 			}
 			Expect(ValidUserK8sClient.Create(ctx, byoHost)).Should(Succeed())
 		})
-		It("should allow the request from a valid user", func() {
+		It("should allow the agent to update the status of its ByoHost", func() {
 			arch := "amd64"
 			byoHost.Status.HostDetails.Architecture = arch
-			Expect(ValidUserK8sClient.Update(ctx, byoHost)).Should(Succeed())
-			Eventually(func() (done bool) {
-				updatedByoHost := &byohv1beta1.ByoHost{}
-				err := ValidUserK8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: "host1"}, updatedByoHost)
-				Expect(err).ShouldNot(HaveOccurred())
-				return updatedByoHost.Status.HostDetails.Architecture == arch
-			})
+			Expect(ValidUserK8sClient.Status().Update(ctx, byoHost)).Should(Succeed())
+
+			updatedByoHost := &byohv1beta1.ByoHost{}
+			Expect(ValidUserK8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: "host1"}, updatedByoHost)).Should(Succeed())
+			Expect(updatedByoHost.Status.HostDetails.Architecture).To(Equal(arch))
 		})
-		It("should reject the request from an invalid user", func() {
-			err := InvalidUserK8sClient.Update(ctx, byoHost)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("test-user cannot create/update ByoHost host1"))
+		It("should forbid the agents to update a ByoHost other than its status", func() {
+			// The agent writes only the status after it creates its ByoHost.
+			byoHost.Labels = map[string]string{"role": "control-plane"}
+			err := ValidUserK8sClient.Update(ctx, byoHost)
+			Expect(apierrors.IsForbidden(err)).To(BeTrue(), "unexpected error: %v", err)
+			err = InvalidUserK8sClient.Update(ctx, byoHost)
+			Expect(apierrors.IsForbidden(err)).To(BeTrue(), "unexpected error: %v", err)
 		})
 		It("should allow the request from an administrator", func() {
 			byoHost.Labels = map[string]string{"role": "worker"}

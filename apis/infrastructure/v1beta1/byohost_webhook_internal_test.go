@@ -12,7 +12,6 @@ import (
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/authentication/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -139,12 +138,10 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(true))
 		})
-		It("Should reject delete request if status.MachineRef is not nil", func() {
-			byoHost.Status.MachineRef = &corev1.ObjectReference{
-				Kind:       "ByoMachine",
-				Namespace:  "default",
-				Name:       "byomachine1",
-				APIVersion: byoHost.APIVersion,
+		It("Should reject delete request if spec.byoMachineRef is not nil", func() {
+			byoHost.Spec.ByoMachineRef = &ByoMachineReference{
+				Name: "byomachine1",
+				UID:  "uid-of-byomachine1",
 			}
 			byoHostRaw, err = json.Marshal(byoHost)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -158,7 +155,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			}
 			resp := v.Handle(ctx, admission.Request{AdmissionRequest: admissionRequest})
 			Expect(resp.AdmissionResponse.Allowed).To(Equal(false))
-			Expect(resp.AdmissionResponse.Result.Message).To(Equal("cannot delete ByoHost when MachineRef is assigned"))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal("cannot delete ByoHost " + byoHost.Name + " while it is attached to ByoMachine byomachine1 (spec.byoMachineRef)"))
 		})
 	})
 })

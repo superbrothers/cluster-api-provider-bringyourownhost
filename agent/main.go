@@ -218,6 +218,7 @@ func main() {
 		TemplateParser:      setupTemplateParser(),
 		Recorder:            mgr.GetEventRecorder("hostagent-controller"),
 		SkipK8sInstallation: skipInstallation,
+		UninstallScriptPath: reconciler.DefaultUninstallScriptPath,
 	}
 	if err = hostReconciler.SetupWithManager(context.TODO(), mgr); err != nil {
 		logger.Error(err, "unable to create controller")

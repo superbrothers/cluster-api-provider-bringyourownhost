@@ -85,13 +85,8 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 			WaitForMachineDeployments:    e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		}, clusterResources)
 
-		// Assert on byohost cluster label to match clusterName
 		byoHostLookupKey := k8stypes.NamespacedName{Name: byoHostName2, Namespace: namespace.Name}
-		byoHostToBeReused := &infrastructurev1beta1.ByoHost{}
-		Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHostToBeReused)).Should(Succeed())
-		cluster, ok := byoHostToBeReused.Labels[clusterv1.ClusterNameLabel]
-		Expect(ok).To(BeTrue())
-		Expect(cluster).To(Equal(clusterName))
+		expectByoHostAttachedToCluster(ctx, byoHostLookupKey, clusterName)
 
 		By("Delete the cluster and freeing the ByoHosts")
 		framework.DeleteAllClustersAndWait(ctx, framework.DeleteAllClustersAndWaitInput{
@@ -101,15 +96,13 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 			ArtifactFolder:       artifactFolder,
 		}, e2eConfig.GetIntervals(specName, "wait-delete-cluster")...)
 
-		// Assert if cluster label is removed
-		// This verifies that the byohost has rejoined the capacity pool. The
-		// agent removes the label after it resets the host, which can be after
-		// the cluster is deleted.
-		Eventually(func(g Gomega) {
-			byoHost := &infrastructurev1beta1.ByoHost{}
-			g.Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHost)).To(Succeed())
-			g.Expect(byoHost.Labels).NotTo(HaveKey(clusterv1.ClusterNameLabel))
-		}, e2eConfig.GetIntervals(specName, "wait-delete-cluster")...).Should(Succeed())
+		// The deletion of a Machine waits until the agent resets its host, and
+		// the controller detaches the host, so the host has rejoined the
+		// capacity pool when the cluster is deleted.
+		freedByoHost := &infrastructurev1beta1.ByoHost{}
+		Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, freedByoHost)).To(Succeed())
+		Expect(freedByoHost.Spec).To(Equal(infrastructurev1beta1.ByoHostSpec{}))
+		Expect(freedByoHost.Status.LastReset).NotTo(BeNil())
 
 		By("Creating a new cluster")
 		clusterName = fmt.Sprintf("%s-%s", specName, util.RandomString(6))
@@ -133,12 +126,7 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 			WaitForMachineDeployments:    e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		}, clusterResources)
 
-		// Assert on byohost cluster label to match clusterName
-		byoHostToBeReused = &infrastructurev1beta1.ByoHost{}
-		Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHostToBeReused)).Should(Succeed())
-		cluster, ok = byoHostToBeReused.Labels[clusterv1.ClusterNameLabel]
-		Expect(ok).To(BeTrue())
-		Expect(cluster).To(Equal(clusterName))
+		expectByoHostAttachedToCluster(ctx, byoHostLookupKey, clusterName)
 
 	})
 
@@ -163,3 +151,17 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 		}
 	})
 })
+
+// expectByoHostAttachedToCluster expects that the ByoHost is attached to a
+// ByoMachine of the cluster.
+func expectByoHostAttachedToCluster(ctx context.Context, byoHostLookupKey k8stypes.NamespacedName, clusterName string) {
+	byoHost := &infrastructurev1beta1.ByoHost{}
+	Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoHostLookupKey, byoHost)).To(Succeed())
+	Expect(byoHost.Spec.ByoMachineRef).NotTo(BeNil(), "ByoHost %s is not attached to a ByoMachine", byoHostLookupKey)
+
+	byoMachine := &infrastructurev1beta1.ByoMachine{}
+	byoMachineLookupKey := k8stypes.NamespacedName{Name: byoHost.Spec.ByoMachineRef.Name, Namespace: byoHostLookupKey.Namespace}
+	Expect(bootstrapClusterProxy.GetClient().Get(ctx, byoMachineLookupKey, byoMachine)).To(Succeed())
+	Expect(byoMachine.UID).To(Equal(byoHost.Spec.ByoMachineRef.UID))
+	Expect(byoMachine.Labels).To(HaveKeyWithValue(clusterv1.ClusterNameLabel, clusterName))
+}

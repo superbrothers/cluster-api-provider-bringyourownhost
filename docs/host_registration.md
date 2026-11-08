@@ -151,14 +151,14 @@ The provider installs the following RBAC (`config/rbac`; the names get the prefi
 | Identity | User and groups | Permissions |
 |---|---|---|
 | Bootstrap token of a BootstrapKubeconfig | `system:bootstrap:<token ID>` in `system:bootstrappers` and `system:bootstrappers:byoh` | CertificateSigningRequests: create, get, list and watch (`byoh-csr-creator-clusterrole`) |
-| Host | `byoh:host:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list, watch, update, patch and delete; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
+| Host | `byoh:host:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list, watch and delete; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
 | BYOH controller manager | the ServiceAccount `byoh-controller-manager` in `byoh-system` | `manager-role`, which includes all the verbs on Secrets in all namespaces, the resources of BYOH, and the approval of the CSRs of the signer `kubernetes.io/kube-apiserver-client` |
 
 The ByoHost webhook also checks the creation, the update and the deletion of ByoHosts:
 
 - A member of `byoh:hosts` can create and update only the ByoHost whose name follows `byoh:host:` in its username.
 - The requests of the other users, such as the controller manager and the administrators, are left to RBAC.
-- Nobody can delete a ByoHost while it is attached to a Machine (`status.machineRef`).
+- Nobody can delete a ByoHost while it is attached to a ByoMachine (`spec.byoMachineRef`). See [When a host is not reset](host_lifecycle.md#when-a-host-is-not-reset) for a host that is not reset.
 
 The webhook does not check the status of ByoHosts.
 
@@ -197,7 +197,7 @@ Without the renewal, register the host again before its certificate expires (see
 The following are known, and are planned to be changed:
 
 - A host can get all the Secrets in all namespaces, and list all the ByoHosts. A compromised host can read the bootstrap data of the other hosts, which their ByoHosts refer to in `spec.bootstrapSecret`. In a self-hosted management cluster, it can also read `<cluster>-kubeconfig`, which is the administrator kubeconfig of the management cluster itself. Planned: let a host read only the Secrets of its own ByoHost.
-- A host can update the status of any ByoHost, and delete any ByoHost that is not attached to a Machine.
+- A host can update the status of any ByoHost, for example report that another host has been reset, and delete any ByoHost that is not attached to a ByoMachine.
 - A bootstrap token of BYOH can get a certificate of any host name, including the names of registered hosts. Planned: bind each bootstrap token to a host name for one use, and deny the CSRs for the names of registered hosts.
 - The name of the CSR is fixed for each hostname. Someone who can create CSRs can create `byoh-csr-<hostname>` first, and the host cannot get its certificate until that CSR is removed.
 - The renewal of a certificate needs a new bootstrap kubeconfig and a restart of the agent. Planned: renew with the certificate of the host.

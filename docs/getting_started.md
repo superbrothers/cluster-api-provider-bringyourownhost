@@ -370,7 +370,7 @@ The agent reports its version to its ByoHost every time it starts, so the column
 
 ### Stopping and removing the agent
 
-Stopping or removing the agent does not reset the host: the kubelet and the node keep running. To take a host out of a cluster, delete or scale down its Machine first, and wait until the agent resets the host and its ByoHost is no longer attached to a Machine.
+Stopping or removing the agent does not reset the host: the kubelet and the node keep running. To take a host out of a cluster, delete or scale down its Machine first. The deletion of the Machine finishes after the agent has reset the host, and its ByoHost is no longer attached to a ByoMachine (see [Host lifecycle](host_lifecycle.md)).
 
 - To stop the agent: `sudo systemctl disable --now byoh-hostagent`.
 - To remove the agent: `sudo apt remove byoh-hostagent`. This stops the agent, and keeps `/etc/default/byoh-hostagent`, the bootstrap kubeconfig if it is there, and `/root/.byoh/config`, so that the host can run the agent again with the same identity.

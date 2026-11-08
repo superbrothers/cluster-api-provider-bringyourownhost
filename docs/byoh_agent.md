@@ -4,6 +4,9 @@ BYOH agent is a binary that runs on the hosts and its responsibility include -
 1. Registration - Register the host to the cluster capacity pool
 2. Setup - Install / Uninstall Kubernetes components on the host
 3. Bootstrap - Convert the host to a Kubernetes node using kubeadm
+4. Reset - Reset the host when its Machine is deleted, so that the host can be used again
+
+The agent acts on the spec of its ByoHost, which the controller writes, and reports in the status. See [Host lifecycle](host_lifecycle.md) for the states of a host and the fields that the controller and the agent write.
 
 ## Running the agent
 
@@ -72,6 +75,8 @@ The agent writes/removes certain files on the local file system during kubeadm i
 `/var/lib/kubelet/` - Contains configuration files for kubelet
 
 `/var/lib/etcd/` - It is the directory where etcd places its data.
+
+`uninstall.sh` in the working directory of the agent (`/var/lib/byoh-hostagent/` with the deb package) - The uninstall script of the Kubernetes components that the agent has installed, which the agent keeps from the installation until it resets the host.
 
 The above directories contain files that are used for functioning of cluster (created as part of kubeadm init/join). The agent **does not** perform any OS level changes on the host.
 
