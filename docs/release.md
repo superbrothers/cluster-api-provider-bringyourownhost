@@ -27,9 +27,18 @@ We follow semantic versioning for the releases, see https://semver.org.
    git push origin v0.6.0
    ```
 
-3. Wait for the [Draft Release](https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/draft-release.yaml) workflow to finish. If a job fails without a change of the code, re-run the failed jobs. If the fix needs a change of the code, delete the draft release and the tag (`git push origin :refs/tags/v0.6.0` and `git tag -d v0.6.0`), merge the fix and tag again.
+3. Wait for the [Draft Release](https://github.com/superbrothers/cluster-api-provider-bringyourownhost/actions/workflows/draft-release.yaml) workflow to finish. If a job fails without a change of the code, re-run the failed jobs. If the fix needs a change of the code, delete the draft release and the tag, merge the fix and tag again. `gh release delete --cleanup-tag` deletes the release and the tag in the repository:
+   ```shell
+   gh release delete v0.6.0 --cleanup-tag
+   git tag -d v0.6.0
+   ```
 
-4. The first time only, make the package of the image public. The package is private when the workflow pushes it for the first time, and the kubelets pull the image without a pull Secret. Open `https://github.com/users/superbrothers/packages/container/cluster-api-byoh-controller/settings`, and change the visibility to public in "Danger Zone". A public package cannot be made private again.
+4. The first time only, check that the image can be pulled without credentials, as the kubelets pull it without a pull Secret. Open `https://github.com/superbrothers/cluster-api-provider-bringyourownhost/pkgs/container/cluster-api-byoh-controller` without signing in, or pull the image after logging out:
+   ```shell
+   docker logout ghcr.io
+   docker pull ghcr.io/superbrothers/cluster-api-byoh-controller:v0.6.0
+   ```
+   `docker buildx imagetools inspect` uses the stored credentials, so it does not show whether the package is public. The package of this repository became public when the workflow pushed it for the first time, although GitHub documents private as the default. If it is private, open `https://github.com/users/superbrothers/packages/container/cluster-api-byoh-controller/settings`, and change the visibility to public in "Danger Zone". A public package cannot be made private again.
 
 5. Check the draft release and the image:
    - The release has all the assets above, they match `checksums.txt`, and `infrastructure-components.yaml` uses the image of the tag:
@@ -61,4 +70,4 @@ We follow semantic versioning for the releases, see https://semver.org.
 
 ### Pre-releases
 
-To try the workflow, for example before the first release of a minor version, push a pre-release tag such as `v0.6.0-rc.0` first, and check it with the steps 3 to 5. The workflow marks the release of a tag with a `-` as a pre-release. When clusterctl picks the latest version, it prefers releases to pre-releases, but it picks a pre-release if the repository has no release. Delete the draft release and the tag if they are not needed, and delete the version of the image in the package, if needed.
+To try the workflow, for example before the first release of a minor version, push a pre-release tag such as `v0.6.0-rc.0` first, and check it with the steps 3 to 5. The workflow marks the release of a tag with a `-` as a pre-release. When clusterctl picks the latest version, it prefers releases to pre-releases, but it picks a pre-release if the repository has no release. Delete the draft release and the tag if they are not needed, with `gh release delete v0.6.0-rc.0 --cleanup-tag` and `git tag -d v0.6.0-rc.0`, and delete the version of the image in the package, if needed.
