@@ -124,9 +124,6 @@ jobs:
       with:
         go-version-file: go.mod
 
-    - name: Install prequisit packages
-      run: sudo apt update && sudo apt install -qq --yes socat ebtables ethtool conntrack
-
     # The verify job checks the generated files, the format and vet.
     - name: Run the tests
       run: make test-coverage
