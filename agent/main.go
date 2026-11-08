@@ -91,7 +91,7 @@ func setupflags() {
 	flag.StringVar(&namespace, "namespace", "default", "Namespace in the management cluster where you would like to register this host")
 	flag.Int64Var(&certExpiryDuration, "certExpiryDuration", registration.ExpirationSeconds, "Duration (in seconds) for the expiration of the host certificates")
 	flag.Var(&labels, "label", "labels to attach to the ByoHost CR in the form labelname=labelVal for e.g. '--label site=apac --label cores=2'")
-	flag.StringVar(&metricsbindaddress, "metricsbindaddress", ":8080", "metricsbindaddress is the TCP address that the controller should bind to for serving prometheus metrics.It can be set to \"0\" to disable the metrics serving")
+	flag.StringVar(&metricsbindaddress, "metricsbindaddress", "127.0.0.1:8080", "metricsbindaddress is the TCP address that the controller should bind to for serving prometheus metrics over HTTP without authentication. It can be set to \"0\" to disable the metrics serving")
 	flag.BoolVar(&skipInstallation, "skip-installation", false, "If you want to skip installation of the kubernetes component binaries")
 	flag.BoolVar(&printVersion, "version", false, "Print the version of the agent")
 	flag.StringVar(&bootstrapKubeConfig, "bootstrap-kubeconfig", "", "Provide bootstrap kubeconfig for bootstrap token workflow")
