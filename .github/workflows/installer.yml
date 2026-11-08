@@ -1,0 +1,63 @@
+name: installer
+
+# Tests the scripts of the default installer on Ubuntu 24.04 and 26.04, on
+# amd64 and arm64, with the tested versions of Kubernetes in the README. Pull
+# requests run it when they change the installer, its test or the versions;
+# drafts are skipped, and a pull request runs it when it is marked ready for
+# review. It also runs every week, as the installer downloads from pkgs.k8s.io,
+# GitHub and the Ubuntu archive, which change without a change here.
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths:
+    - 'installer/**'
+    - 'hack/installer-scripts/**'
+    - 'hack/test-installer.sh'
+    - 'README.md'
+    - '.github/workflows/installer.yml'
+  schedule:
+  # Every Sunday at 19:47 UTC.
+  - cron: '47 19 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run for the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  installer:
+    name: installer (ubuntu ${{ matrix.ubuntu }}, ${{ matrix.arch }})
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: [ '24.04', '26.04' ]
+        arch: [ amd64, arm64 ]
+        include:
+        - arch: amd64
+          runner: ubuntu-24.04
+        - arch: arm64
+          runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+
+    # The host in a container uses the inotify instances and watches of root on
+    # the runner.
+    - name: Raise the inotify limits
+      run: sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
+
+    - name: Test the installer
+      run: hack/test-installer.sh ${{ matrix.ubuntu }}

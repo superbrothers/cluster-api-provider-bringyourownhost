@@ -49,8 +49,22 @@ jobs:
     - name: Vet
       run: make vet
 
+  # Each architecture tests its deb package on a runner of the architecture,
+  # so that the binary of the agent runs on arm64 as well. The amd64 runner
+  # also builds the arm64 package, as the release builds both there.
   build-agent:
-      runs-on: ubuntu-24.04
+      name: build-agent (${{ matrix.arch }})
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            archs: amd64 arm64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            archs: arm64
+      runs-on: ${{ matrix.runner }}
       steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -65,12 +79,12 @@ jobs:
 
       # This builds the binaries of the agent, and packages them.
       - name: Build the agent and its deb packages
-        run: make host-agent-debs
+        run: make host-agent-debs HOST_AGENT_ARCHS="${{ matrix.archs }}"
 
       # The runner is a throwaway machine with systemd, on which the test can
       # install and remove the package.
       - name: Test the deb package
-        run: sudo hack/test-host-agent-deb.sh _dist/byoh-hostagent_*_amd64.deb
+        run: sudo hack/test-host-agent-deb.sh _dist/byoh-hostagent_*_${{ matrix.arch }}.deb
 
   build-image:
     runs-on: ubuntu-24.04

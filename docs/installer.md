@@ -39,6 +39,8 @@ The default version of containerd is an LTS release, and the default version of 
 
 The installer does not change the firewall of the hosts. Open the ports that Kubernetes and the CNI plugin use (https://kubernetes.io/docs/reference/networking/ports-and-protocols/).
 
+`hack/test-installer.sh <Ubuntu version>` tests the scripts on a host of Ubuntu in a privileged container, on the architecture of the machine that runs it. For each tested version of Kubernetes in the README in turn, the install script installs it, `kubeadm init` brings up a control plane, and `kubeadm reset` and the uninstall script remove it, leaving nothing that the install script added. The `installer` workflow runs it on amd64 and arm64 for the pull requests that change the installer, and every week.
+
 ## Custom installer
 If someone wants to implement their own installer controller then they need to follow the following contract:
 
