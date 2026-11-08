@@ -11,7 +11,6 @@ RELEASE_DIR := _dist
 # Image URL to use all building/pushing image targets
 IMG ?= ${REGISTRY}/${IMAGE_NAME}:${TAG}
 BYOH_BASE_IMG = byoh/node:e2e
-BYOH_BASE_IMG_DEV = byoh/node:dev
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 
 REPO_ROOT := $(shell pwd)
@@ -147,9 +146,6 @@ docker-buildx: ## Build docker image with the manager for all the platforms in A
 
 prepare-byoh-docker-host-image:
 	docker build test/e2e -f test/e2e/BYOHDockerFile -t ${BYOH_BASE_IMG}
-
-prepare-byoh-docker-host-image-dev:
-	docker build test/e2e -f docs/BYOHDockerFileDev -t ${BYOH_BASE_IMG_DEV}
 
 cluster-templates-v1beta1: kustomize ## Generate cluster templates for v1beta1
 	$(KUSTOMIZE) build $(BYOH_TEMPLATES)/v1beta1/templates/vm --load-restrictor LoadRestrictionsNone > $(BYOH_TEMPLATES)/v1beta1/templates/vm/cluster-template.yaml
