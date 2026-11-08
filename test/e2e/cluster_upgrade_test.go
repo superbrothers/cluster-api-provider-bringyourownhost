@@ -10,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -24,20 +22,12 @@ import (
 var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 
 	var (
-		ctx                          context.Context
-		specName                     = "upgrade"
-		namespace                    *corev1.Namespace
-		cancelWatches                context.CancelFunc
-		clusterResources             *clusterctl.ApplyClusterTemplateAndWaitResult
-		byoHostCapacityPool          = 4
-		byoHostName                  string
-		dockerClient                 *client.Client
-		allbyohostContainerIDs       []string
-		allAgentLogFiles             []string
-		kubernetesVersionUpgradeFrom = "v1.25.11"
-		kubernetesVersionUpgradeTo   = "v1.26.6"
-		etcdUpgradeVersion           = "3.5.6-0"
-		coreDNSUpgradeVersion        = "v1.9.3"
+		ctx              context.Context
+		specName         = "upgrade"
+		namespace        *corev1.Namespace
+		cancelWatches    context.CancelFunc
+		clusterResources *clusterctl.ApplyClusterTemplateAndWaitResult
+		hosts            *byoHosts
 	)
 
 	BeforeEach(func() {
@@ -48,62 +38,32 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 		Expect(clusterctlConfigPath).To(BeAnExistingFile(), "Invalid argument. clusterctlConfigPath must be an existing file when calling %s spec", specName)
 		Expect(bootstrapClusterProxy).NotTo(BeNil(), "Invalid argument. bootstrapClusterProxy can't be nil when calling %s spec", specName)
 		Expect(os.MkdirAll(artifactFolder, 0755)).To(Succeed(), "Invalid argument. artifactFolder can't be created for %s spec", specName)
-		Expect(e2eConfig.Variables).To(HaveKey(KubernetesVersion))
+		Expect(e2eConfig.Variables).To(HaveKey(KubernetesVersionUpgradeFrom))
+		Expect(e2eConfig.Variables).To(HaveKey(KubernetesVersionUpgradeTo))
 
 		// set up a Namespace where to host objects for this spec and create a watcher for the namespace events.
 		namespace, cancelWatches = setupSpecNamespace(ctx, specName, bootstrapClusterProxy, artifactFolder)
 		clusterResources = new(clusterctl.ApplyClusterTemplateAndWaitResult)
+		hosts = newByoHosts(ctx)
 	})
 
 	It("Should successfully upgrade cluster", func() {
 		clusterName := fmt.Sprintf("%s-%s", specName, util.RandomString(6))
-		var err error
-		dockerClient, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		Expect(err).NotTo(HaveOccurred())
+		kubernetesVersionUpgradeFrom := e2eConfig.MustGetVariable(KubernetesVersionUpgradeFrom)
+		kubernetesVersionUpgradeTo := e2eConfig.MustGetVariable(KubernetesVersionUpgradeTo)
 
-		By("Creating byohost capacity pool containing 4 docker hosts")
-		for i := 0; i < byoHostCapacityPool; i++ {
-
-			byoHostName = fmt.Sprintf("byohost-%s", util.RandomString(6))
-
-			runner := ByoHostRunner{
-				Context:               ctx,
-				clusterConName:        clusterConName,
-				ByoHostName:           byoHostName,
-				Namespace:             namespace.Name,
-				PathToHostAgentBinary: pathToHostAgentBinary,
-				DockerClient:          dockerClient,
-				NetworkInterface:      "kind",
-				bootstrapClusterProxy: bootstrapClusterProxy,
-				CommandArgs: map[string]string{
-					"--bootstrap-kubeconfig": "/bootstrap.conf",
-					"--namespace":            namespace.Name,
-					"--v":                    "1",
-				},
-			}
-			runner.BootstrapKubeconfigData = generateBootstrapKubeconfig(runner.Context, bootstrapClusterProxy, clusterConName)
-			byohost, err := runner.SetupByoDockerHost()
-			Expect(err).NotTo(HaveOccurred())
-			output, byohostContainerID, err := runner.ExecByoDockerHost(byohost)
-			allbyohostContainerIDs = append(allbyohostContainerIDs, byohostContainerID)
-			Expect(err).NotTo(HaveOccurred())
-
-			// read the log of host agent container in backend, and write it
-			agentLogFile := fmt.Sprintf("/tmp/host-agent-%d.log", i)
-
-			f := WriteDockerLog(output, agentLogFile)
-			defer func() {
-				deferredErr := f.Close()
-				if deferredErr != nil {
-					Showf("error closing file %s:, %v", agentLogFile, deferredErr)
-				}
-			}()
-			allAgentLogFiles = append(allAgentLogFiles, agentLogFile)
-		}
+		// The KubeadmControlPlane rolls out with maxSurge 1, so it needs a spare
+		// control plane host for the new machine. The MachineDeployment rolls
+		// out with maxSurge 0: it deletes the old machine first, and the new
+		// machine reuses the host that the agent has reset.
+		By("Creating byohost capacity pool containing 2 control plane hosts and 1 worker host")
+		hosts.Start(ctx, namespace.Name, []byoHost{
+			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
+			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
+			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: workerRole},
+		})
 
 		By("creating a workload cluster with one control plane node and one worker node")
-
-		setControlPlaneIP(context.Background(), dockerClient)
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -123,18 +83,17 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 			WaitForMachineDeployments:    e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		}, clusterResources)
 
+		// The etcd and CoreDNS image tags are left empty, so that kubeadm
+		// upgrades them to its defaults for the new version, and the framework
+		// does not wait for particular tags.
 		By("Upgrading the control plane")
 		framework.UpgradeControlPlaneAndWaitForUpgrade(ctx, framework.UpgradeControlPlaneAndWaitForUpgradeInput{
 			ClusterProxy:                bootstrapClusterProxy,
 			Cluster:                     clusterResources.Cluster,
 			ControlPlane:                clusterResources.ControlPlane,
-			EtcdImageTag:                etcdUpgradeVersion,
-			DNSImageTag:                 coreDNSUpgradeVersion,
 			KubernetesUpgradeVersion:    kubernetesVersionUpgradeTo,
 			WaitForMachinesToBeUpgraded: e2eConfig.GetIntervals(specName, "wait-machine-upgrade"),
 			WaitForKubeProxyUpgrade:     e2eConfig.GetIntervals(specName, "wait-machine-upgrade"),
-			WaitForDNSUpgrade:           e2eConfig.GetIntervals(specName, "wait-machine-upgrade"),
-			WaitForEtcdUpgrade:          e2eConfig.GetIntervals(specName, "wait-machine-upgrade"),
 		})
 
 		By("Upgrading the machine deployment")
@@ -143,7 +102,7 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 			Cluster:                     clusterResources.Cluster,
 			UpgradeVersion:              kubernetesVersionUpgradeTo,
 			MachineDeployments:          clusterResources.MachineDeployments,
-			WaitForMachinesToBeUpgraded: e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
+			WaitForMachinesToBeUpgraded: e2eConfig.GetIntervals(specName, "wait-machine-upgrade"),
 		})
 
 		By("Waiting until nodes are ready")
@@ -156,33 +115,18 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 			WaitForNodesReady: e2eConfig.GetIntervals(specName, "wait-nodes-ready"),
 		})
 	})
+
 	JustAfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
-			ShowInfo(allAgentLogFiles)
+		if CurrentSpecReport().Failed() {
+			ShowInfo(hosts.LogFiles())
 		}
 	})
 
 	AfterEach(func() {
 		// Dumps all the resources in the spec namespace, then cleanups the cluster object and the spec namespace itself.
+		// The hosts and the load balancer are removed after this.
 		dumpSpecResourcesAndCleanup(ctx, specName, bootstrapClusterProxy, artifactFolder, namespace, cancelWatches, clusterResources.Cluster, e2eConfig.GetIntervals, skipCleanup)
 
-		if dockerClient != nil {
-			for _, byohostContainerID := range allbyohostContainerIDs {
-				err := dockerClient.ContainerStop(ctx, byohostContainerID, container.StopOptions{})
-				Expect(err).NotTo(HaveOccurred())
-
-				err = dockerClient.ContainerRemove(ctx, byohostContainerID, container.RemoveOptions{})
-				Expect(err).NotTo(HaveOccurred())
-			}
-
-		}
-
-		for _, agentLogFile := range allAgentLogFiles {
-			err := os.Remove(agentLogFile)
-			if err != nil {
-				Showf("error removing file %s: %v", agentLogFile, err)
-			}
-		}
 		err := os.Remove(ReadByohControllerManagerLogShellFile)
 		if err != nil {
 			Showf("error removing file %s: %v", ReadByohControllerManagerLogShellFile, err)
