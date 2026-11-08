@@ -31,6 +31,22 @@ Kubernetes cluster will be transformed into a [management cluster](https://clust
     kind create cluster
     ```
 
+    The API server of this cluster listens only on `127.0.0.1` of the machine, which the hosts on other machines cannot reach. For such hosts, create the cluster with an address and a port of the machine that the hosts can reach, with `networking.apiServerAddress` and `networking.apiServerPort` (see [the configuration of kind](https://kind.sigs.k8s.io/docs/user/configuration/#api-server)):
+
+    ```shell
+    cat > kind-config.yaml <<EOF
+    kind: Cluster
+    apiVersion: kind.x-k8s.io/v1alpha4
+    networking:
+      # An address of this machine that the hosts can reach.
+      apiServerAddress: "192.168.0.10"
+      apiServerPort: 6443
+    EOF
+    kind create cluster --config kind-config.yaml
+    ```
+
+    kind strongly recommends keeping the API server on loopback for security, so choose an address that only the network of the hosts can reach, for example the address of the machine on a VPN, and do not use `0.0.0.0`. The kubeconfig of kind and the bootstrap kubeconfigs created below then point to this address.
+
 ---
 [kind] is not designed for production use.
 
@@ -44,6 +60,15 @@ Note for macOS users: you may need to [increase the memory available](https://do
 
 Now that we've got clusterctl installed and all the prerequisites in place, let's transform the Kubernetes cluster
 into a management cluster by using `clusterctl init`.
+
+The `byoh` provider built into clusterctl points to the upstream repository, vmware-tanzu/cluster-api-provider-bringyourownhost. To install the provider from this repository, override it in the clusterctl configuration file (by default `~/.config/cluster-api/clusterctl.yaml`; see [provider repositories](https://cluster-api.sigs.k8s.io/clusterctl/configuration.html#provider-repositories)):
+
+```yaml
+providers:
+- name: byoh
+  url: https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/latest/infrastructure-components.yaml
+  type: InfrastructureProvider
+```
 
 ```shell
 clusterctl init --infrastructure byoh
@@ -141,13 +166,52 @@ $ cat /etc/hosts
 127.0.0.1 node01
 ...
 ```
-
-If you are trying this on your own hosts, then for each host
-1. Download the [byoh-hostagent-linux-amd64](https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/releases/download/v0.3.0/byoh-hostagent-linux-amd64)
-2. Copy the bootstrap kubeconfig file of the host (for example `~/bootstrap-kubeconfig-host1.conf`) as `bootstrap-kubeconfig.conf`
-3. Start the agent with the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label.
+- The hostname of each host must be unique in the management cluster, and must be a lowercase DNS subdomain. It becomes the name of the ByoHost and the common name of the certificate of the host (see [Host registration and permissions](host_registration.md)), and a host with the hostname of another host takes over its ByoHost. Some images, such as Ubuntu for Raspberry Pi, name every host `ubuntu`. Set a hostname before you start the agent, for example:
 ```shell
-./byoh-hostagent-linux-amd64 --bootstrap-kubeconfig bootstrap-kubeconfig.conf --label role=control-plane > byoh-agent.log 2>&1 &
+sudo hostnamectl set-hostname node01
+```
+- The clock of the host must be synchronized, as the agent connects to the management cluster with TLS. The agent starts after `time-sync.target`, which does not wait for the synchronization by default. On the hosts without a real-time clock, such as Raspberry Pi, enable the service that waits for it: `chrony-wait.service` with chrony (the default of Ubuntu 25.10 and later), or `systemd-time-wait-sync.service` with systemd-timesyncd (the default of Ubuntu 24.04).
+```shell
+sudo systemctl enable chrony-wait.service
+```
+
+### Installing the agent on your hosts
+
+If you are trying this on your own hosts, install the agent from the deb package of the release on each host. The package runs the agent as the systemd service `byoh-hostagent`.
+
+1. Download the package of the architecture of the host, and check it with `checksums.txt` of the release, which has the SHA-256 of all the assets of the release:
+    ```shell
+    curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/v0.6.0/byoh-hostagent_0.6.0_$(dpkg --print-architecture).deb
+    curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/v0.6.0/checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    ```
+    When it prints `OK` for the package, install the package:
+    ```shell
+    sudo apt install ./byoh-hostagent_0.6.0_$(dpkg --print-architecture).deb
+    ```
+    Installing the package does not start the agent.
+2. Copy the bootstrap kubeconfig of the host (for example `~/bootstrap-kubeconfig-host1.conf`) only to that host, and put it where the service reads it:
+    ```shell
+    sudo install -m 0600 bootstrap-kubeconfig-host1.conf /etc/byoh-hostagent/bootstrap-kubeconfig
+    ```
+3. Set the flags of the agent in `BYOH_HOSTAGENT_ARGS` of `/etc/default/byoh-hostagent` with `sudoedit /etc/default/byoh-hostagent`. Set the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label. Add `--namespace=<namespace>` to register the host in a namespace other than `default`. See [BYOH agent](byoh_agent.md) for the flags.
+    ```shell
+    BYOH_HOSTAGENT_ARGS="--label=role=control-plane"
+    ```
+4. Start the agent, and enable it to start at boot:
+    ```shell
+    sudo systemctl enable --now byoh-hostagent
+    ```
+5. Check that it runs, and see its log:
+    ```shell
+    systemctl status byoh-hostagent
+    journalctl -u byoh-hostagent -f
+    ```
+
+After the host is registered (see `kubectl get byohosts` below), remove the bootstrap kubeconfig from the host. The agent then uses the kubeconfig of the host in `/root/.byoh/config`.
+
+```shell
+sudo rm /etc/byoh-hostagent/bootstrap-kubeconfig
 ```
 
 ---
@@ -157,7 +221,15 @@ If you are trying this using the docker containers we started above, then we wou
 export KIND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kind-control-plane)
 sed -i 's/    server\:.*/    server\: https\:\/\/'"$KIND_IP"'\:6443/g' ~/bootstrap-kubeconfig-host*.conf
 ```
-Assuming you have downloaded the `byoh-hostagent-linux-amd64` into your working directory, you can use the following script to start the agent on the containers.
+Download the binary of the agent of the release into your working directory, and check it with `checksums.txt` of the release:
+
+```shell
+curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/v0.6.0/byoh-hostagent-linux-amd64
+curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/v0.6.0/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
+
+When it prints `OK` for the binary, use the following script to copy it to the containers.
 
 ```shell
 for i in {1..2}
@@ -255,13 +327,53 @@ NAME                                                          STATUS     ROLES  
 byoh-cluster-8siai8                                           Ready      master   5m   v1.26.6
 ```
 
-## Additional: Running host-agent as a systemd service
-You can use the script `hack/install-host-agent-service.sh` to start the agent as a systemd service that restarts the agent whenever the kubeconfig changes. This can be very helpful when there are certain changes done in the kubeconfig, like certificate renewal or rotation, which takes effect after restarting the manager and that can lead to termination of the process. This script allows the host agent service to be restarted after process termination, and a watcher service observes the kubeconfig for changes. After the change is done and detected by the watcher, the agent service is restarted. This script requires superuser privillages for its execution.
+## Managing the agent on your hosts
+
+The package `byoh-hostagent` installs:
+
+- `/usr/bin/byoh-hostagent`, the agent;
+- `/usr/lib/systemd/system/byoh-hostagent.service`, which runs the agent as root with `--bootstrap-kubeconfig=/etc/byoh-hostagent/bootstrap-kubeconfig` and the flags in `BYOH_HOSTAGENT_ARGS`, and restarts it whenever it exits. The service starts only when `/etc/byoh-hostagent/bootstrap-kubeconfig` or `/root/.byoh/config` exists;
+- `/etc/default/byoh-hostagent`, which sets `BYOH_HOSTAGENT_ARGS`;
+- `/etc/byoh-hostagent/` (mode 0700), for the bootstrap kubeconfig of the host.
+
+The agent keeps the kubeconfig of the host, with its certificate and private key, in `/root/.byoh/config`, and its temporary files in `/var/lib/byoh-hostagent`.
+
+### Changing the flags
+
+Edit `/etc/default/byoh-hostagent`, and restart the agent:
 
 ```shell
-./install-host-agent-service.sh path/to/agent/binary
+sudo systemctl restart byoh-hostagent
 ```
-**Note** : Ensure to properly shutdown processes, release ports, etc on each byoh agent re-run (i.e. pkill  byoh-agent processes, etc)
+
+The agent sets the labels of `--label` only when it creates the ByoHost, so changing them does not change the labels of a registered host.
+
+### Upgrading the agent
+
+Install the package of the new release over the old one. Use the agent of the same release as the provider. Download the package and check it with `checksums.txt` of the release:
+
+```shell
+curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/<version>/byoh-hostagent_<version without v>_$(dpkg --print-architecture).deb
+curl -fLO https://github.com/superbrothers/cluster-api-provider-bringyourownhost/releases/download/<version>/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+```
+
+When it prints `OK` for the package, install the package:
+
+```shell
+sudo apt install ./byoh-hostagent_<version without v>_$(dpkg --print-architecture).deb
+```
+
+The upgrade restarts the agent if it is running. Do not upgrade the agent while its host is being provisioned or deleted, that is, while the Machine of the host is being created or deleted: the restart stops the installation script or kubeadm that the agent is running.
+
+### Stopping and removing the agent
+
+Stopping or removing the agent does not reset the host: the kubelet and the node keep running. To take a host out of a cluster, delete or scale down its Machine first, and wait until the agent resets the host and its ByoHost is no longer attached to a Machine.
+
+- To stop the agent: `sudo systemctl disable --now byoh-hostagent`.
+- To remove the agent: `sudo apt remove byoh-hostagent`. This stops the agent, and keeps `/etc/default/byoh-hostagent`, the bootstrap kubeconfig if it is there, and `/root/.byoh/config`, so that the host can run the agent again with the same identity.
+- To remove the agent and its data: `sudo apt purge byoh-hostagent`. This also removes `/etc/default/byoh-hostagent`, `/etc/byoh-hostagent`, `/var/lib/byoh-hostagent`, and `/root/.byoh` with the kubeconfig and the private key of the host. The host has to be registered again with a new bootstrap kubeconfig to run the agent again. When you remove the host for good, also delete its ByoHost (see [Operating securely](host_registration.md#operating-securely)).
+
 <!-- References -->
 [cluster-api-book]: https://cluster-api.sigs.k8s.io/
 [glossary-bootstrapping]: https://cluster-api.sigs.k8s.io/reference/glossary.html#bootstrap

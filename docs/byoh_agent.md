@@ -5,6 +5,12 @@ BYOH agent is a binary that runs on the hosts and its responsibility include -
 2. Setup - Install / Uninstall Kubernetes components on the host
 3. Bootstrap - Convert the host to a Kubernetes node using kubeadm
 
+## Running the agent
+
+Each release has a deb package of the agent for amd64 and arm64, `byoh-hostagent_<version>_<arch>.deb`, which runs the agent as root with the systemd service `byoh-hostagent`. The service passes `--bootstrap-kubeconfig=/etc/byoh-hostagent/bootstrap-kubeconfig` and the flags in `BYOH_HOSTAGENT_ARGS` of `/etc/default/byoh-hostagent`, and restarts the agent whenever it exits. See [Installing the agent on your hosts](getting_started.md#installing-the-agent-on-your-hosts) and [Managing the agent on your hosts](getting_started.md#managing-the-agent-on-your-hosts).
+
+The releases also have the binaries of the agent, `byoh-hostagent-linux-<arch>`, for example for the Docker hosts of the tests.
+
 ## Usage of BYOH agent
 
 Below flags are supported by the BYOH agent:-  
@@ -19,7 +25,7 @@ Duration in seconds of the certificate that the agent requests for the host (def
 ```
 --label labelFlags       
 ```
-Labels to attach to the ByoHost CR in the form `labelname=labelVal` Eg: `--label site=apac --label cores=2`
+Labels to attach to the ByoHost CR in the form `labelname=labelVal` Eg: `--label site=apac --label cores=2`. The agent sets them only when it creates the ByoHost.
 ```
 --metricsbindaddress string
 ```

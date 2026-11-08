@@ -65,18 +65,25 @@ The token is not bound to a host: anyone who has it can register a host of any n
 byoh-hostagent --bootstrap-kubeconfig bootstrap-kubeconfig-host1.conf
 ```
 
+With the deb package of the agent, put the bootstrap kubeconfig at `/etc/byoh-hostagent/bootstrap-kubeconfig` and start the service `byoh-hostagent`, which passes the file with `--bootstrap-kubeconfig` (see [Installing the agent on your hosts](getting_started.md#installing-the-agent-on-your-hosts)):
+
+```shell
+sudo install -m 0600 bootstrap-kubeconfig-host1.conf /etc/byoh-hostagent/bootstrap-kubeconfig
+sudo systemctl enable --now byoh-hostagent
+```
+
 The agent uses the bootstrap kubeconfig only when `~/.byoh/config` does not exist; see [Restarting the agent](#restarting-the-agent). It then:
 
-1. generates a private key in the file `byoh-client.key.tmp` in its working directory (mode 0600), or reuses the file when it exists;
+1. generates a private key in the file `byoh-client.key.tmp` in its working directory (mode 0600; `/var/lib/byoh-hostagent` with the package), or reuses the file when it exists;
 2. creates a CertificateSigningRequest (CSR) named `byoh-csr-<hostname>` with the bootstrap token:
     - signer `kubernetes.io/kube-apiserver-client`;
     - usage `client auth`;
     - subject `CN=byoh:host:<hostname>`, `O=byoh:hosts`, without subject alternative names;
     - `expirationSeconds` from `--certExpiryDuration`, in seconds (365 days by default);
 3. waits up to one hour for the certificate, and exits with an error if it is not issued;
-4. writes `~/.byoh/config` (mode 0600) in the home directory of the user that runs it, with the server and the CA of the bootstrap kubeconfig, the certificate and the private key, and removes `byoh-client.key.tmp`.
+4. writes `~/.byoh/config` (mode 0600) in the home directory of the user that runs it (`/root/.byoh/config` with the package), with the server and the CA of the bootstrap kubeconfig, the certificate and the private key, and removes `byoh-client.key.tmp`.
 
-`<hostname>` is the hostname of the host. It becomes the name of the ByoHost, so it must be a valid name of a Kubernetes object: a lowercase DNS subdomain.
+`<hostname>` is the hostname of the host. It becomes the name of the ByoHost, so it must be a valid name of a Kubernetes object: a lowercase DNS subdomain. It must also be unique in the management cluster: a host with the hostname of another host gets the identity `byoh:host:<hostname>` of that host, and takes over its ByoHost. Some images, such as Ubuntu for Raspberry Pi, name every host `ubuntu`, so set the hostname of each host before you start its agent.
 
 ### 3. The CSR is approved
 
@@ -126,7 +133,14 @@ With the certificate, the agent gets or creates the ByoHost named `<hostname>` i
 
 When `~/.byoh/config` exists, the agent uses it and does not use the bootstrap kubeconfig. It registers the existing ByoHost again.
 
-To register the host again from the start, for example after its certificate has expired, stop the agent, remove `~/.byoh/config`, and start the agent with a new bootstrap kubeconfig.
+To register the host again from the start, for example after its certificate has expired, stop the agent, remove `~/.byoh/config`, and start the agent with a new bootstrap kubeconfig. With the package:
+
+```shell
+sudo systemctl stop byoh-hostagent
+sudo rm /root/.byoh/config
+sudo install -m 0600 bootstrap-kubeconfig-host1.conf /etc/byoh-hostagent/bootstrap-kubeconfig
+sudo systemctl start byoh-hostagent
+```
 
 ## What each identity can do
 
@@ -159,7 +173,7 @@ Without the renewal, register the host again before its certificate expires (see
 
 ## Operating securely
 
-- Create a BootstrapKubeconfig for each host just before you start its agent, and copy its bootstrap kubeconfig only to that host. Remove the file from the host after the registration, unless the agent renews its certificate with it.
+- Create a BootstrapKubeconfig for each host just before you start its agent, and copy its bootstrap kubeconfig only to that host. Remove the file from the host after the registration (`sudo rm /etc/byoh-hostagent/bootstrap-kubeconfig` with the package), unless the agent renews its certificate with it.
 - Keep `~/.byoh/config` on the host readable only by root. It contains the private key of the host.
 - Delete the BootstrapKubeconfigs that you no longer need, as their status keeps the token. Deleting a BootstrapKubeconfig does not delete its token. An expired token can no longer be used, and the token cleaner of kube-controller-manager deletes it if it is enabled (kubeadm enables it). To revoke a token before it expires, delete its Secret. The token ID is the part of the token before the dot:
 
@@ -167,7 +181,7 @@ Without the renewal, register the host again before its certificate expires (see
   kubectl -n kube-system delete secret bootstrap-token-<token ID>
   ```
 
-- Kubernetes cannot revoke a client certificate. When you remove a host, delete its ByoHost after its Machine is deleted. The certificate of the host stays valid until it expires, with the permissions of the group `byoh:hosts`. A shorter `--certExpiryDuration` shortens this period. If a host may be compromised, the only ways to stop its certificate earlier are to remove the permissions of the group `byoh:hosts`, which stops all the hosts, or to rotate the CA of the cluster.
+- Kubernetes cannot revoke a client certificate. When you remove a host, delete its ByoHost after its Machine is deleted, and remove the kubeconfig and the private key of the host from it (`sudo apt purge byoh-hostagent` with the package removes `/root/.byoh`). The certificate of the host stays valid until it expires, with the permissions of the group `byoh:hosts`. A shorter `--certExpiryDuration` shortens this period. If a host may be compromised, the only ways to stop its certificate earlier are to remove the permissions of the group `byoh:hosts`, which stops all the hosts, or to rotate the CA of the cluster.
 - Check the CSRs with `kubectl get csr`. The condition of a denied CSR tells why:
 
   ```shell
