@@ -81,14 +81,10 @@ spec:
           enable-hostpath-provisioner: "true"
     initConfiguration:
       nodeRegistration:
-        ignorePreflightErrors:
-        - Swap
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
     joinConfiguration:
       nodeRegistration:
-        ignorePreflightErrors:
-        - Swap
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
   machineTemplate:
