@@ -56,9 +56,11 @@ var _ = Describe("When BYOH joins existing cluster [Cluster-Class]", func() {
 	It("Should create a workload cluster with single BYOH host", func() {
 		clusterName = fmt.Sprintf("%s-%s", specName, util.RandomString(6))
 
+		// The hosts have random names, as the CSR of a host is named after it
+		// and is left in the management cluster for the later specs.
 		hosts.Start(ctx, namespace.Name, []byoHost{
-			{Name: "byohost1", Role: controlPlaneRole},
-			{Name: "byohost2", Role: workerRole},
+			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
+			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: workerRole},
 		})
 
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{

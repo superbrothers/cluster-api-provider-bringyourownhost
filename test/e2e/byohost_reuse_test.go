@@ -53,8 +53,10 @@ var _ = Describe("When BYO Host rejoins the capacity pool", func() {
 
 	It("Should reuse the same BYO Host after it is reset", func() {
 		clusterName := fmt.Sprintf("%s-%s", specName, util.RandomString(6))
-		byoHostName1 := "byohost-1"
-		byoHostName2 := "byohost-for-reuse"
+		// The hosts have random names, as the CSR of a host is named after it
+		// and is left in the management cluster for the later specs.
+		byoHostName1 := fmt.Sprintf("byohost-%s", util.RandomString(6))
+		byoHostName2 := fmt.Sprintf("byohost-%s", util.RandomString(6))
 
 		// Both clusters use the same hosts and the same load balancer.
 		hosts.Start(ctx, namespace.Name, []byoHost{
