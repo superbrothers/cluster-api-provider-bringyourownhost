@@ -190,11 +190,6 @@ func (r *ByoMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Return early if the object or Cluster is paused
 	if annotations.IsPaused(cluster, byoMachine) {
 		logger.Info("byoMachine or linked Cluster is marked as paused. Won't reconcile")
-		if machineScope.ByoHost != nil {
-			if err = r.setPausedConditionForByoHost(ctx, machineScope, true); err != nil {
-				logger.Error(err, "cannot set paused annotation for byohost")
-			}
-		}
 		v1beta1conditions.MarkFalse(byoMachine, infrav1.BYOHostReady, infrav1.ClusterOrResourcePausedReason, clusterv1beta1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
 	}
@@ -451,24 +446,6 @@ func (r *ByoMachineReconciler) getRemoteClient(ctx context.Context, byoMachine *
 	return remoteClient, nil
 }
 
-func (r *ByoMachineReconciler) setPausedConditionForByoHost(ctx context.Context, machineScope *byoMachineScope, isPaused bool) error {
-	helper, err := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
-	if err != nil {
-		return err
-	}
-
-	if isPaused {
-		desired := map[string]string{
-			clusterv1.PausedAnnotation: "",
-		}
-		annotations.AddAnnotations(machineScope.ByoHost, desired)
-	} else {
-		delete(machineScope.ByoHost.Annotations, clusterv1.PausedAnnotation)
-	}
-
-	return helper.Patch(ctx, machineScope.ByoHost)
-}
-
 func (r *ByoMachineReconciler) setInstallationSecretForByoHost(ctx context.Context, machineScope *byoMachineScope) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("cluster", machineScope.Cluster.Name)
 	installerConfig, ready, err := r.getInstallerConfigAndStatus(ctx, machineScope)
@@ -569,10 +546,6 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 		Namespace: machineScope.ByoMachine.Namespace,
 		Name:      *machineScope.Machine.Spec.Bootstrap.DataSecretName,
 	}
-	if host.Annotations == nil {
-		host.Annotations = make(map[string]string)
-	}
-	host.Annotations[infrav1.K8sVersionAnnotation] = strings.Split(machineScope.Machine.Spec.Version, "+")[0]
 
 	// Claim the host with the labels, with optimistic locking: the patch fails
 	// with a conflict when the host has changed since it was read, for example
@@ -597,16 +570,12 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 }
 
 // reconcileAttachedByoHost makes sure that the ByoHost attached to the
-// ByoMachine, if any, is not paused, and has status.machineRef. The ByoMachine
-// claims the host with the labels before it sets status.machineRef, which the
-// agent waits for, so set it again when setting it has failed.
+// ByoMachine, if any, has status.machineRef. The ByoMachine claims the host
+// with the labels before it sets status.machineRef, which the agent waits for,
+// so set it again when setting it has failed.
 func (r *ByoMachineReconciler) reconcileAttachedByoHost(ctx context.Context, machineScope *byoMachineScope) error {
 	if machineScope.ByoHost == nil {
 		return nil
-	}
-	if err := r.setPausedConditionForByoHost(ctx, machineScope, false); err != nil {
-		log.FromContext(ctx).Error(err, "Set resume flag for byohost failed")
-		return err
 	}
 	if machineScope.ByoHost.Status.MachineRef == nil {
 		return r.setMachineRef(ctx, machineScope, machineScope.ByoHost)

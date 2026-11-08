@@ -170,10 +170,6 @@ runCmd:
 						Name:      bootstrapSecret.Name,
 					}
 
-					byoHost.Annotations = map[string]string{
-						infrastructurev1beta1.K8sVersionAnnotation: "1.22",
-					}
-
 					Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
 				})
 
@@ -261,10 +257,6 @@ runCmd:
 							Kind:      "Secret",
 							Namespace: installationSecret.Namespace,
 							Name:      installationSecret.Name,
-						}
-
-						byoHost.Annotations = map[string]string{
-							infrastructurev1beta1.K8sVersionAnnotation: "1.22",
 						}
 
 						Expect(patchHelper.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).NotTo(HaveOccurred())
@@ -506,7 +498,6 @@ runCmd:
 				byoHost.Labels = map[string]string{clusterv1.ClusterNameLabel: "test-cluster"}
 				byoHost.Annotations = map[string]string{
 					infrastructurev1beta1.HostCleanupAnnotation: "",
-					infrastructurev1beta1.K8sVersionAnnotation:  "1.22",
 				}
 				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 				v1beta1conditions.MarkTrue(byoHost, infrastructurev1beta1.K8sComponentsInstallationSucceeded)
@@ -555,7 +546,6 @@ runCmd:
 				Expect(updatedByoHost.Labels).NotTo(HaveKey(clusterv1.ClusterNameLabel))
 				Expect(updatedByoHost.Status.MachineRef).To(BeNil())
 				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.HostCleanupAnnotation))
-				Expect(updatedByoHost.Annotations).NotTo(HaveKey(infrastructurev1beta1.K8sVersionAnnotation))
 
 				k8sNodeBootstrapSucceeded := v1beta1conditions.Get(updatedByoHost, infrastructurev1beta1.K8sNodeBootstrapSucceeded)
 				Expect(*k8sNodeBootstrapSucceeded).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{

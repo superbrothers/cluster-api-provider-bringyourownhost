@@ -164,13 +164,13 @@ test-coverage: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run 
 	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r --cover --coverprofile=cover.out --output-dir=. --skip-package=test .
 
 agent-test: prepare-byoh-docker-host-image $(GINKGO) $(SETUP_ENVTEST) ## Run agent tests
-	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r $(HOST_AGENT_DIR) --coverprofile cover.out
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all -r --coverprofile cover.out $(HOST_AGENT_DIR)
 
 controller-test: $(GINKGO) $(SETUP_ENVTEST) ## Run controller tests
-	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all controllers/infrastructure --coverprofile cover.out --vv
+	$(ENVTEST_ASSETS) $(GINKGO) --randomize-all --coverprofile cover.out --vv controllers/infrastructure
 
 webhook-test: $(GINKGO) $(SETUP_ENVTEST) ## Run webhook tests
-	$(ENVTEST_ASSETS) $(GINKGO) apis/infrastructure/v1beta1 --coverprofile cover.out
+	$(ENVTEST_ASSETS) $(GINKGO) --coverprofile cover.out apis/infrastructure/v1beta1
 
 _SKIP_ARGS := $(if $(GINKGO_SKIP),-skip="$(GINKGO_SKIP)")
 

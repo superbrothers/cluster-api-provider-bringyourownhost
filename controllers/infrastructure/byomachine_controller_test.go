@@ -274,8 +274,8 @@ var _ = Describe("Controllers/ByomachineController", func() {
 				createdByoHostLabels := createdByoHost.GetLabels()
 				Expect(createdByoHostLabels[clusterv1.ClusterNameLabel]).To(Equal(capiCluster.Name))
 
-				createdByoHostAnnotations := createdByoHost.GetAnnotations()
-				Expect(createdByoHostAnnotations[infrastructurev1beta1.K8sVersionAnnotation]).To(Equal(strings.Split(testClusterVersion, "+")[0]))
+				// The version of Kubernetes goes only to the K8sInstallerConfig.
+				Expect(createdByoHost.GetAnnotations()).NotTo(HaveKey(infrastructurev1beta1.K8sVersionAnnotation))
 
 				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
 				err = k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)
@@ -326,7 +326,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					})
 				})
 
-				It("should mark host as paused when the ByoMachine is paused", func() {
+				It("should not pause the host when the ByoMachine is paused", func() {
 					ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 					Expect(err).ShouldNot(HaveOccurred())
 					pauseAnnotations := map[string]string{
@@ -344,29 +344,28 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					createdByoHost := &infrastructurev1beta1.ByoHost{}
 					err = k8sClientUncached.Get(ctx, byoHostLookupKey, createdByoHost)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(createdByoHost.Annotations).To(HaveKey(clusterv1.PausedAnnotation))
+					Expect(createdByoHost.Annotations).NotTo(HaveKey(clusterv1.PausedAnnotation))
 				})
 
-				It("should set paused status of byohost to false when byomachine is not paused", func() {
-
+				It("should keep the paused annotation that an administrator has added to the host", func() {
 					ph, err := v1beta1patch.NewHelper(byoHost, k8sClientUncached)
 					Expect(err).ShouldNot(HaveOccurred())
 					pauseAnnotations := map[string]string{
 						clusterv1.PausedAnnotation: "",
 					}
-
 					annotations.AddAnnotations(byoHost, pauseAnnotations)
 					Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 					WaitForObjectToBeUpdatedInCache(byoHost, func(object client.Object) bool {
 						return annotations.HasPaused(object.(*infrastructurev1beta1.ByoHost))
 					})
+
 					_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
 					Expect(err).ToNot(HaveOccurred())
+
 					createdByoHost := &infrastructurev1beta1.ByoHost{}
 					err = k8sClientUncached.Get(ctx, byoHostLookupKey, createdByoHost)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(createdByoHost.Annotations).NotTo(HaveKey(clusterv1.PausedAnnotation))
-
+					Expect(createdByoHost.Annotations).To(HaveKey(clusterv1.PausedAnnotation))
 				})
 
 				It("should set host platform info from byohost to byomachine", func() {
