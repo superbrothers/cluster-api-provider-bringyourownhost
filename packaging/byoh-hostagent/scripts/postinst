@@ -1,0 +1,22 @@
+#!/bin/sh
+# Copyright 2026 The Cluster API Provider BringYourOwnHost Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+case "$1" in
+    configure)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+            # A fresh install does not enable or start the agent: the host has
+            # to be configured first (/etc/default/byoh-hostagent and
+            # /etc/byoh-hostagent/bootstrap-kubeconfig). On an upgrade ($2 is
+            # the previous version), restart the agent if it is running.
+            if [ -n "$2" ]; then
+                systemctl try-restart byoh-hostagent.service
+            fi
+        fi
+        ;;
+esac
+
+exit 0

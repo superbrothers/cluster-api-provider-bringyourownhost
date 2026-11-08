@@ -1,0 +1,48 @@
+# Copyright 2026 The Cluster API Provider BringYourOwnHost Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+# The deb package of the host agent, built by `make host-agent-debs` from the
+# repository root with GOARCH and DEB_VERSION set.
+name: byoh-hostagent
+arch: ${GOARCH}
+platform: linux
+version: ${DEB_VERSION}
+section: admin
+priority: optional
+maintainer: Kazuki Suda <230185+superbrothers@users.noreply.github.com>
+description: |-
+  Host agent of the Cluster API Provider BringYourOwnHost
+  The agent registers the host to a management cluster of Cluster API as a
+  ByoHost, and installs Kubernetes on the host and bootstraps it as a node
+  when a ByoMachine is assigned to it.
+homepage: https://github.com/superbrothers/cluster-api-provider-bringyourownhost
+license: Apache-2.0
+
+contents:
+  - src: ./bin/byoh-hostagent-linux-${GOARCH}
+    dst: /usr/bin/byoh-hostagent
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ./packaging/byoh-hostagent/byoh-hostagent.service
+    dst: /usr/lib/systemd/system/byoh-hostagent.service
+    file_info:
+      mode: 0644
+  - src: ./packaging/byoh-hostagent/default
+    dst: /etc/default/byoh-hostagent
+    type: config|noreplace
+    file_info:
+      mode: 0644
+  # The bootstrap kubeconfig of the host goes here.
+  - dst: /etc/byoh-hostagent
+    type: dir
+    file_info:
+      mode: 0700
+
+scripts:
+  postinstall: ./packaging/byoh-hostagent/scripts/postinst
+  preremove: ./packaging/byoh-hostagent/scripts/prerm
+  postremove: ./packaging/byoh-hostagent/scripts/postrm
+
+deb:
+  compression: xz

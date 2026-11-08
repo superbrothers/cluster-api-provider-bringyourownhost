@@ -1,0 +1,27 @@
+#!/bin/sh
+# Copyright 2026 The Cluster API Provider BringYourOwnHost Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+case "$1" in
+    remove)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+        fi
+        ;;
+    purge)
+        # Remove the bootstrap kubeconfig, the state of the agent, and
+        # /root/.byoh with the kubeconfig of the host and its private key, so
+        # that no credentials of the host are left behind. Only the agent uses
+        # /root/.byoh.
+        rm -rf /etc/byoh-hostagent /var/lib/byoh-hostagent /root/.byoh
+        # systemctl disable cannot remove the link after the unit is gone.
+        rm -f /etc/systemd/system/multi-user.target.wants/byoh-hostagent.service
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload
+        fi
+        ;;
+esac
+
+exit 0

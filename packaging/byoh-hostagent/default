@@ -1,0 +1,12 @@
+# The flags of the BYOH host agent (byoh-hostagent.service), separated by
+# spaces. The unit already passes
+# --bootstrap-kubeconfig=/etc/byoh-hostagent/bootstrap-kubeconfig.
+#
+# For example, to register the host in the namespace default as a worker:
+#
+#   BYOH_HOSTAGENT_ARGS="--namespace=default --label=role=worker"
+#
+# Restart the agent after changing this file:
+#
+#   sudo systemctl restart byoh-hostagent
+BYOH_HOSTAGENT_ARGS=""

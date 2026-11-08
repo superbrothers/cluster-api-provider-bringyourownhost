@@ -63,8 +63,14 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: build agent
-        run: make host-agent-binaries
+      # This builds the binaries of the agent, and packages them.
+      - name: Build the agent and its deb packages
+        run: make host-agent-debs
+
+      # The runner is a throwaway machine with systemd, on which the test can
+      # install and remove the package.
+      - name: Test the deb package
+        run: sudo hack/test-host-agent-deb.sh _dist/byoh-hostagent_*_amd64.deb
 
   build-image:
     runs-on: ubuntu-24.04
