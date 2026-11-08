@@ -15,7 +15,7 @@ __BYOH__ is a Cluster API Infrastructure Provider for already-provisioned hosts 
 
 **BYO Host** - A Linux host provisioned and managed outside of Cluster API
 
-**BYOH Capacity Pool** - A set of BYO Hosts registered in a management cluster & authorized for usage as a capacity for deploying Kubernetes nodes
+**BYOH Capacity Pool** - A set of BYO Hosts registered in a namespace of a management cluster & authorized for usage as a capacity for deploying Kubernetes nodes of the clusters in the same namespace
 
 **Kubernetes Node** - A Kubernetes Node that runs on top of a Host. There is a 1-to-1 relationship between nodes and hosts (every host has zero or one nodes). Node provisioning and lifecycle management is a Cluster API responsibility
 

@@ -194,7 +194,7 @@ If you are trying this on your own hosts, install the agent from the deb package
     ```shell
     sudo install -m 0600 bootstrap-kubeconfig-host1.conf /etc/byoh-hostagent/bootstrap-kubeconfig
     ```
-3. Set the flags of the agent in `BYOH_HOSTAGENT_ARGS` of `/etc/default/byoh-hostagent` with `sudoedit /etc/default/byoh-hostagent`. Set the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label. Add `--namespace=<namespace>` to register the host in a namespace other than `default`. See [BYOH agent](byoh_agent.md) for the flags.
+3. Set the flags of the agent in `BYOH_HOSTAGENT_ARGS` of `/etc/default/byoh-hostagent` with `sudoedit /etc/default/byoh-hostagent`. Set the label of the role of the host: `role=control-plane` for the control plane, and `role=worker` for the workers. The cluster templates select the hosts by this label. Register the host in the namespace of the cluster, as a ByoMachine selects only the ByoHosts in its own namespace: add `--namespace=<namespace>` when the cluster is not in `default`. See [BYOH agent](byoh_agent.md) for the flags.
     ```shell
     BYOH_HOSTAGENT_ARGS="--label=role=control-plane"
     ```

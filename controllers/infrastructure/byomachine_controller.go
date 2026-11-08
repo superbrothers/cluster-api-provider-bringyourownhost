@@ -217,9 +217,11 @@ func (r *ByoMachineReconciler) FetchAttachedByoHost(ctx context.Context, byomach
 	byohostLabels, _ := labels.NewRequirement(infrav1.AttachedByoMachineLabel, selection.Equals, []string{byomachineNamespace + "." + byomachineName})
 	selector = selector.Add(*byohostLabels)
 	hostsList := &infrav1.ByoHostList{}
+	// A ByoMachine only takes a ByoHost in its own namespace (see attachByoHost).
 	err := r.Client.List(
 		ctx,
 		hostsList,
+		client.InNamespace(byomachineNamespace),
 		&client.ListOptions{LabelSelector: selector},
 	)
 	if err != nil {
@@ -532,7 +534,10 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	byohostLabels, _ := labels.NewRequirement(clusterv1.ClusterNameLabel, selection.DoesNotExist, nil)
 	selector = selector.Add(*byohostLabels)
 
-	err = r.Client.List(ctx, hostsList, &client.ListOptions{LabelSelector: selector})
+	// Take only a ByoHost in the namespace of the ByoMachine. clusterctl move
+	// carries only the objects in the namespace of the cluster, so the ByoHost
+	// of a cluster must be in the same namespace to move with it.
+	err = r.Client.List(ctx, hostsList, client.InNamespace(machineScope.ByoMachine.Namespace), &client.ListOptions{LabelSelector: selector})
 	if err != nil {
 		logger.Error(err, "failed to list byohosts")
 		return ctrl.Result{}, err
