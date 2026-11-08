@@ -18,14 +18,14 @@ var _ = Describe("Registration", func() {
 			hostName = "test-host"
 		)
 		It("should return error if Private Key is not valid", func() {
-			certData, err := generateCSR(hostName, &rsa.PrivateKey{})
+			certData, err := generateCSR("test-namespace", hostName, &rsa.PrivateKey{})
 			Expect(err).Should(HaveOccurred())
 			Expect(certData).To(BeNil())
 		})
 		It("should return csrData with the correct arguments", func() {
 			privateKeyData, err := rsa.GenerateKey(rand.Reader, 2048)
 			Expect(err).Should(Not(HaveOccurred()))
-			certData, err := generateCSR(hostName, privateKeyData)
+			certData, err := generateCSR("test-namespace", hostName, privateKeyData)
 			Expect(err).Should(Not(HaveOccurred()))
 			Expect(certData).ToNot(BeNil())
 		})

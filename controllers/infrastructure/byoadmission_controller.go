@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	// hostCSRNamePrefix is the prefix of the names of the CSRs of the agents.
-	hostCSRNamePrefix = "byoh-csr-"
 	// hostCSRApprovedReason is the reason of the Approved condition.
 	hostCSRApprovedReason = "Approved by ByoAdmission Controller"
 	// hostCSRInvalidReason is the reason of the Denied condition.
@@ -143,8 +141,14 @@ func validateHostCSR(csr *certv1.CertificateSigningRequest) error {
 	}) {
 		return fmt.Errorf("the usages must be one of %v, not %s", hostCSRUsages, truncate(fmt.Sprint(csr.Spec.Usages)))
 	}
-	if err := validateHostCSRRequest(csr.Spec.Request); err != nil {
+	namespace, hostName, err := validateHostCSRRequest(csr.Spec.Request)
+	if err != nil {
 		return err
+	}
+	// One CSR per host: the name of the CSR is made of the namespace and the
+	// name in the common name, as the agent names it.
+	if name := infrav1.HostCSRName(namespace, hostName); csr.Name != name {
+		return fmt.Errorf("the name of the CSR must be %q for the common name, not %q", truncate(name), truncate(csr.Name))
 	}
 
 	// An agent registers its host with a bootstrap token of BYOH. It renews
@@ -157,42 +161,53 @@ func validateHostCSR(csr *certv1.CertificateSigningRequest) error {
 	return nil
 }
 
-// validateHostCSRRequest returns an error that tells why the certificate
-// request of the CSR is not one of a host.
-func validateHostCSRRequest(pemRequest []byte) error {
+// validateHostCSRRequest returns the namespace and the host name in the
+// common name of the certificate request of the CSR, or an error that tells
+// why the request is not one of a host.
+//
+// The namespace in the common name is not checked against the bootstrap token
+// that requests the certificate, so a bootstrap token of BYOH can get a
+// certificate for any namespace until the tokens are bound to the hosts.
+func validateHostCSRRequest(pemRequest []byte) (namespace, hostName string, err error) {
 	block, _ := pem.Decode(pemRequest)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
-		return fmt.Errorf("the request must be a PEM-encoded CERTIFICATE REQUEST")
+		return "", "", fmt.Errorf("the request must be a PEM-encoded CERTIFICATE REQUEST")
 	}
 	request, err := x509.ParseCertificateRequest(block.Bytes)
 	if err != nil {
-		return fmt.Errorf("failed to parse the request: %w", err)
+		return "", "", fmt.Errorf("failed to parse the request: %w", err)
 	}
 	if err := request.CheckSignature(); err != nil {
-		return fmt.Errorf("the signature of the request is invalid: %w", err)
+		return "", "", fmt.Errorf("the signature of the request is invalid: %w", err)
 	}
 
 	subject := request.Subject
 	if !slices.Equal(subject.Organization, []string{infrav1.HostsGroup}) {
-		return fmt.Errorf("the organization must be only %q, not %s", infrav1.HostsGroup, truncate(fmt.Sprintf("%q", subject.Organization)))
+		return "", "", fmt.Errorf("the organization must be only %q, not %s", infrav1.HostsGroup, truncate(fmt.Sprintf("%q", subject.Organization)))
 	}
-	hostName, ok := strings.CutPrefix(subject.CommonName, infrav1.HostUsernamePrefix)
+	identity, ok := strings.CutPrefix(subject.CommonName, infrav1.HostUsernamePrefix)
+	if ok {
+		namespace, hostName, ok = strings.Cut(identity, ":")
+	}
 	if !ok {
-		return fmt.Errorf("the common name must be %s<host name>, not %q", infrav1.HostUsernamePrefix, truncate(subject.CommonName))
+		return "", "", fmt.Errorf("the common name must be %s<namespace>:<host name>, not %q", infrav1.HostUsernamePrefix, truncate(subject.CommonName))
+	}
+	if errs := validation.IsDNS1123Label(namespace); len(errs) > 0 {
+		return "", "", fmt.Errorf("the namespace %q in the common name is invalid: %s", truncate(namespace), strings.Join(errs, ", "))
 	}
 	if errs := validation.IsDNS1123Subdomain(hostName); len(errs) > 0 {
-		return fmt.Errorf("the host name %q in the common name is invalid: %s", truncate(hostName), strings.Join(errs, ", "))
+		return "", "", fmt.Errorf("the host name %q in the common name is invalid: %s", truncate(hostName), strings.Join(errs, ", "))
 	}
 	// The subject must have no other attributes, such as an organizational
 	// unit or a user ID, nor a second common name, as the API server or other
 	// authenticators of the certificate may read them.
 	if !hasOnlyOrganizationAndCommonName(subject.Names) {
-		return fmt.Errorf("the subject must have only one organization and one common name, not %d attributes", len(subject.Names))
+		return "", "", fmt.Errorf("the subject must have only one organization and one common name, not %d attributes", len(subject.Names))
 	}
 	if len(request.DNSNames) > 0 || len(request.IPAddresses) > 0 || len(request.EmailAddresses) > 0 || len(request.URIs) > 0 {
-		return fmt.Errorf("the request must not have subject alternative names")
+		return "", "", fmt.Errorf("the request must not have subject alternative names")
 	}
-	return nil
+	return namespace, hostName, nil
 }
 
 // hasOnlyOrganizationAndCommonName returns whether the attributes of a subject
@@ -248,10 +263,10 @@ func (r *ByoAdmissionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// watch only BYOH created CSRs
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return strings.HasPrefix(e.Object.GetName(), hostCSRNamePrefix)
+				return strings.HasPrefix(e.Object.GetName(), infrav1.HostCSRNamePrefix)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				return strings.HasPrefix(e.ObjectOld.GetName(), hostCSRNamePrefix)
+				return strings.HasPrefix(e.ObjectOld.GetName(), infrav1.HostCSRNamePrefix)
 			}}).
 		Complete(r)
 }

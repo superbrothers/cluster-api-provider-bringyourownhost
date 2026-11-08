@@ -65,12 +65,12 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 		return v1.UserInfo{Username: name, Groups: []string{"byoh:hosts", "system:authenticated"}}
 	}
 	nameDeniedMessage := func(userName, verb, name string) string {
-		return fmt.Sprintf("%s cannot %s ByoHost %s: a member of byoh:hosts can create, and update the status of, only the ByoHost named after its username byoh:host:<name>", userName, verb, name)
+		return fmt.Sprintf("%s cannot %s ByoHost default/%s: a member of byoh:hosts can create, and update the status of, only the ByoHost of the namespace and the name in its username byoh:host:<namespace>:<name>", userName, verb, name)
 	}
 	notHosts := []TableEntry{
 		Entry("an administrator", v1.UserInfo{Username: "kubernetes-admin", Groups: []string{"kubeadm:cluster-admins", "system:authenticated"}}),
 		Entry("the manager", v1.UserInfo{Username: "system:serviceaccount:byoh-system:byoh-controller-manager", Groups: []string{"system:serviceaccounts", "system:serviceaccounts:byoh-system", "system:authenticated"}}),
-		Entry("a user with the username of an agent", v1.UserInfo{Username: "byoh:host:host2"}),
+		Entry("a user with the username of an agent", v1.UserInfo{Username: "byoh:host:default:host2"}),
 		Entry("a username of two parts", v1.UserInfo{Username: "system:admin"}),
 	}
 
@@ -86,7 +86,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 	} {
 		Context(fmt.Sprintf("When ByoHost gets a request to %s it", request.verb), func() {
 			It("Should allow the request from the agent of the host", func() {
-				resp := v.Handle(context.TODO(), newRequest(request.operation, request.subResource, newByoHost("host1"), agent("byoh:host:host1")))
+				resp := v.Handle(context.TODO(), newRequest(request.operation, request.subResource, newByoHost("host1"), agent("byoh:host:default:host1")))
 				Expect(resp.AdmissionResponse.Allowed).To(BeTrue())
 			})
 
@@ -96,9 +96,11 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 					Expect(resp.AdmissionResponse.Allowed).To(BeFalse())
 					Expect(resp.AdmissionResponse.Result.Message).To(Equal(nameDeniedMessage(userName, request.verb, name)))
 				},
-				Entry("another host", "byoh:host:host2", "host1"),
-				Entry("a host whose name contains the name of the agent's host", "byoh:host:host1", "host10"),
-				Entry("a host whose name is contained in the name of the agent's host", "byoh:host:host10", "host1"),
+				Entry("another host", "byoh:host:default:host2", "host1"),
+				Entry("a host whose name contains the name of the agent's host", "byoh:host:default:host1", "host10"),
+				Entry("a host whose name is contained in the name of the agent's host", "byoh:host:default:host10", "host1"),
+				Entry("the host of the same name in another namespace", "byoh:host:other:host1", "host1"),
+				Entry("a namespace whose name contains the namespace of the agent's host", "byoh:host:default2:host1", "host1"),
 			)
 
 			DescribeTable("Should reject the request from a member of byoh:hosts without the username of an agent",
@@ -113,6 +115,8 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 				Entry("a username without colons", "test-user"),
 				Entry("a username of two parts", "byoh:host"),
 				Entry("the prefix only", "byoh:host:"),
+				Entry("a username without a namespace", "byoh:host:host1"),
+				Entry("a username with the namespace only", "byoh:host:default:"),
 				Entry("a username with another prefix", "system:node:host1"),
 			)
 
@@ -133,7 +137,7 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 		It("Should allow the agent to create its ByoHost with the labels of --label", func() {
 			byoHost := newByoHost("host1")
 			byoHost.Labels = map[string]string{"role": "worker", "example.com/site": "tokyo"}
-			resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:host1")))
+			resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:default:host1")))
 			Expect(resp.AdmissionResponse.Allowed).To(BeTrue())
 		})
 
@@ -141,9 +145,9 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 			func(mutate func(*ByoHost), field string) {
 				byoHost := newByoHost("host1")
 				mutate(byoHost)
-				resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:host1")))
+				resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:default:host1")))
 				Expect(resp.AdmissionResponse.Allowed).To(BeFalse())
-				Expect(resp.AdmissionResponse.Result.Message).To(HavePrefix("byoh:host:host1 cannot create ByoHost host1: " + field))
+				Expect(resp.AdmissionResponse.Result.Message).To(HavePrefix("byoh:host:default:host1 cannot create ByoHost default/host1: " + field))
 			},
 			Entry("a label of Cluster API", func(h *ByoHost) {
 				h.Labels = map[string]string{"cluster.x-k8s.io/cluster-name": "cluster1"}
@@ -174,16 +178,16 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 		It("Should not take a label whose prefix only ends with cluster.x-k8s.io as one of Cluster API", func() {
 			byoHost := newByoHost("host1")
 			byoHost.Labels = map[string]string{"examplecluster.x-k8s.io/role": "worker"}
-			resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:host1")))
+			resp := v.Handle(context.TODO(), newRequest(admissionv1.Create, "", byoHost, agent("byoh:host:default:host1")))
 			Expect(resp.AdmissionResponse.Allowed).To(BeTrue())
 		})
 	})
 
 	Context("When ByoHost gets a request to update it other than its status", func() {
 		It("Should reject the request from the agent of the host", func() {
-			resp := v.Handle(context.TODO(), newRequest(admissionv1.Update, "", newByoHost("host1"), agent("byoh:host:host1")))
+			resp := v.Handle(context.TODO(), newRequest(admissionv1.Update, "", newByoHost("host1"), agent("byoh:host:default:host1")))
 			Expect(resp.AdmissionResponse.Allowed).To(BeFalse())
-			Expect(resp.AdmissionResponse.Result.Message).To(Equal("byoh:host:host1 cannot update ByoHost host1: a member of byoh:hosts can update only the status of a ByoHost"))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal("byoh:host:default:host1 cannot update ByoHost default/host1: a member of byoh:hosts can update only the status of a ByoHost"))
 		})
 
 		DescribeTable("Should leave the request from a user that is not a member of byoh:hosts to RBAC",
@@ -197,9 +201,9 @@ var _ = Describe("ByohostWebhook/Unit", func() {
 
 	Context("When ByoHost gets a request to delete it", func() {
 		It("Should reject the request from the agent of the host", func() {
-			resp := v.Handle(context.TODO(), newRequest(admissionv1.Delete, "", newByoHost("host1"), agent("byoh:host:host1")))
+			resp := v.Handle(context.TODO(), newRequest(admissionv1.Delete, "", newByoHost("host1"), agent("byoh:host:default:host1")))
 			Expect(resp.AdmissionResponse.Allowed).To(BeFalse())
-			Expect(resp.AdmissionResponse.Result.Message).To(Equal("byoh:host:host1 cannot delete ByoHost host1: a member of byoh:hosts cannot delete ByoHosts"))
+			Expect(resp.AdmissionResponse.Result.Message).To(Equal("byoh:host:default:host1 cannot delete ByoHost default/host1: a member of byoh:hosts cannot delete ByoHosts"))
 		})
 
 		DescribeTable("Should leave the request from a user that is not a member of byoh:hosts to RBAC",

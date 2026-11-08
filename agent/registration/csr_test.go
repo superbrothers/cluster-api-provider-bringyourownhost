@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/superbrothers/cluster-api-provider-bringyourownhost/agent/registration"
+	infrastructurev1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	"github.com/superbrothers/cluster-api-provider-bringyourownhost/test/builder"
 	certv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +27,7 @@ var _ = Describe("CSR Registration", func() {
 	var (
 		ctx                = context.TODO()
 		hostName           = "test-host"
+		namespace          = "test-namespace"
 		fileDir            string
 		certExpiryDuration = int64((time.Hour * 24).Seconds())
 	)
@@ -106,8 +107,14 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 		It("should return error if hostname is invalid", func() {
 			CSRRegistrar, err := registration.NewByohCSR(cfg, logr.Discard(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			_, _, err = CSRRegistrar.RequestBYOHClientCert("")
+			_, _, err = CSRRegistrar.RequestBYOHClientCert(namespace, "")
 			Expect(err).To(MatchError("hostname is not valid"))
+		})
+		It("should return error if namespace is invalid", func() {
+			CSRRegistrar, err := registration.NewByohCSR(cfg, logr.Discard(), certExpiryDuration)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, _, err = CSRRegistrar.RequestBYOHClientCert("", hostName)
+			Expect(err).To(MatchError("namespace is not valid"))
 		})
 		It("should return client config if bootstrap kubeconfig is valid", func() {
 			fileboot, err := os.CreateTemp(fileDir, "bootstrapkubeconfig")
@@ -131,9 +138,9 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 		It("should create csr if bootstrap kubeconfig is valid", func() {
 			CSRRegistrar, err := registration.NewByohCSR(cfg, logr.Discard(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			_, _, err = CSRRegistrar.RequestBYOHClientCert(hostName)
+			_, _, err = CSRRegistrar.RequestBYOHClientCert(namespace, hostName)
 			Expect(err).NotTo(HaveOccurred())
-			ByohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+			ByohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), metav1.GetOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			// Validate k8s CSR resource
 			Expect(ByohCSR.Spec.SignerName).Should(Equal(certv1.KubeAPIServerClientSignerName))
@@ -144,22 +151,22 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			Expect(pemData).ToNot(Equal(nil))
 			csr, err := x509.ParseCertificateRequest(pemData.Bytes)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(csr.Subject.CommonName).To(Equal(fmt.Sprintf(registration.ByohCSRCNFormat, hostName)))
+			Expect(csr.Subject.CommonName).To(Equal(infrastructurev1beta1.HostUsername(namespace, hostName)))
 			Expect(csr.Subject.Organization[0]).To(Equal("byoh:hosts"))
 
 			Expect(os.Remove(registration.TmpPrivateKey)).ShouldNot(HaveOccurred())
 		})
 		It("should fail creating CSR if the private key got changed", func() {
 			byohCSR, err := builder.CertificateSigningRequest(
-				fmt.Sprintf(registration.ByohCSRNameFormat, hostName),
-				fmt.Sprintf(registration.ByohCSRCNFormat, hostName),
+				infrastructurev1beta1.HostCSRName(namespace, hostName),
+				infrastructurev1beta1.HostUsername(namespace, hostName),
 				"byoh:hosts", 2048).Build()
 			Expect(err).NotTo(HaveOccurred())
 			_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Create(ctx, byohCSR, metav1.CreateOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			_, _, err = CSRRegistrar.RequestBYOHClientCert(hostName)
+			_, _, err = CSRRegistrar.RequestBYOHClientCert(namespace, hostName)
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("retrieved csr is not compatible"))
 
@@ -169,7 +176,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			registration.CSRApprovalTimeout = time.Second * 5
 			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = CSRRegistrar.BootstrapKubeconfig(hostName)
+			err = CSRRegistrar.BootstrapKubeconfig(namespace, hostName)
 			Expect(err).Should(HaveOccurred())
 			Expect(err).To(MatchError("timed out waiting for the condition"))
 			Expect(os.Remove(registration.TmpPrivateKey)).ShouldNot(HaveOccurred())
@@ -179,7 +186,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			go func() {
 				for {
 					time.Sleep(time.Millisecond * 100)
-					byohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+					byohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), metav1.GetOptions{})
 					if err != nil {
 						continue
 					}
@@ -189,9 +196,9 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 						Message: "approved",
 						Status:  corev1.ConditionTrue,
 					})
-					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), byohCSR, metav1.UpdateOptions{})
+					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), byohCSR, metav1.UpdateOptions{})
 					Expect(err).ShouldNot(HaveOccurred())
-					byohCSR, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+					byohCSR, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), metav1.GetOptions{})
 					Expect(err).ShouldNot(HaveOccurred())
 					byohCSR.Status.Certificate = []byte(testCert)
 					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateStatus(ctx, byohCSR, metav1.UpdateOptions{})
@@ -202,7 +209,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			registration.ConfigPath = "/non-existent-mount/config"
 			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = CSRRegistrar.BootstrapKubeconfig(hostName)
+			err = CSRRegistrar.BootstrapKubeconfig(namespace, hostName)
 			Expect(err).Should(HaveOccurred())
 			Expect(err).To(MatchError("mkdir /non-existent-mount: permission denied"))
 			Expect(os.Remove(registration.TmpPrivateKey)).ShouldNot(HaveOccurred())
@@ -212,7 +219,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			go func() {
 				for {
 					time.Sleep(time.Millisecond * 100)
-					byohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+					byohCSR, err := k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), metav1.GetOptions{})
 					if err != nil {
 						continue
 					}
@@ -222,9 +229,9 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 						Message: "approved",
 						Status:  corev1.ConditionTrue,
 					})
-					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), byohCSR, metav1.UpdateOptions{})
+					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), byohCSR, metav1.UpdateOptions{})
 					Expect(err).ShouldNot(HaveOccurred())
-					byohCSR, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+					byohCSR, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(namespace, hostName), metav1.GetOptions{})
 					Expect(err).ShouldNot(HaveOccurred())
 					byohCSR.Status.Certificate = []byte(testCert)
 					_, err = k8sClientSet.CertificatesV1().CertificateSigningRequests().UpdateStatus(ctx, byohCSR, metav1.UpdateOptions{})
@@ -234,7 +241,7 @@ kovW9X7Ook/tTW0HyX6D6HRciA==
 			}()
 			CSRRegistrar, err := registration.NewByohCSR(cfg, klog.Background(), certExpiryDuration)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = CSRRegistrar.BootstrapKubeconfig(hostName)
+			err = CSRRegistrar.BootstrapKubeconfig(namespace, hostName)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(registration.ConfigPath).To(BeARegularFile())
 			Expect(os.Remove(registration.ConfigPath)).ShouldNot(HaveOccurred())

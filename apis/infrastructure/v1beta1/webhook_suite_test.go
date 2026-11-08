@@ -48,8 +48,9 @@ var (
 	ctx                  context.Context
 	cancel               context.CancelFunc
 
-	// Host3K8sClient is the client of the agent of host3, which a test lets
-	// use more verbs with RBAC than the agents, to check the webhook alone.
+	// Host3K8sClient is the client of the agent of host3 in the namespace
+	// default, which a test lets use more verbs with RBAC than the agents, to
+	// check the webhook alone.
 	Host3K8sClient client.Client
 )
 
@@ -142,7 +143,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	validUser, err := testEnv.ControlPlane.AddUser(envtest.User{
-		Name:   "byoh:host:host1",
+		Name:   "byoh:host:default:host1",
 		Groups: []string{"byoh:hosts"},
 	}, nil)
 	Expect(err).NotTo(HaveOccurred())
@@ -151,7 +152,7 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	host3, err := testEnv.ControlPlane.AddUser(envtest.User{
-		Name:   "byoh:host:host3",
+		Name:   "byoh:host:default:host3",
 		Groups: []string{"byoh:hosts"},
 	}, nil)
 	Expect(err).NotTo(HaveOccurred())
