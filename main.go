@@ -113,7 +113,7 @@ func main() {
 		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "controller-leader-election-caph",
+		LeaderElectionID:       "controller-leader-election-byoh",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
