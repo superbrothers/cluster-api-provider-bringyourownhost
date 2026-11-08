@@ -80,8 +80,10 @@ func (v *ByoHostValidator) handleDelete(req *admission.Request) admission.Respon
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	if byoHost.Status.MachineRef != nil {
-		return admission.Denied("cannot delete ByoHost when MachineRef is assigned")
+	// A ByoHost in use is never deleted: its host has not been reset, and the
+	// agent would register the host again as a free ByoHost when it restarts.
+	if byoHost.Spec.ByoMachineRef != nil {
+		return admission.Denied(fmt.Sprintf("cannot delete ByoHost %s while it is attached to ByoMachine %s (spec.byoMachineRef)", byoHost.Name, byoHost.Spec.ByoMachineRef.Name))
 	}
 	return admission.Allowed("")
 }

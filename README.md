@@ -33,6 +33,9 @@ Check out the [getting_started](docs/getting_started.md) guide for launching a B
 ## Host Registration and Permissions
 Check out [host registration and permissions](docs/host_registration.md) for how the hosts join the management cluster, what they can do there, and how to operate them securely.
 
+## Host Lifecycle
+Check out [host lifecycle](docs/host_lifecycle.md) for how the hosts are attached to Machines and reset, and what to do when a host is not reset.
+
 ## Project Status
 
 This project is currently a work-in-progress, in an Alpha state, so it may not be production ready. There is no backwards-compatibility guarantee at this point. For more details on the roadmap and upcoming features, check out the project's [issue](https://github.com/superbrothers/cluster-api-provider-bringyourownhost/issues) tracker on GitHub.

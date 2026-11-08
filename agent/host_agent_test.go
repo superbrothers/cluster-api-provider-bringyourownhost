@@ -266,7 +266,7 @@ var _ = Describe("Agent", func() {
 			}, 10, 1).ShouldNot(BeTrue())
 		})
 
-		Context("when machineref, bootstrap & installation secret is assigned", func() {
+		Context("when the ByoHost is attached, and the bootstrap & installation secrets are assigned", func() {
 			var (
 				byoMachine *infrastructurev1beta1.ByoMachine
 				namespace  types.NamespacedName
@@ -282,12 +282,9 @@ var _ = Describe("Agent", func() {
 				}).Should(BeNil())
 
 				patchHelper, _ := v1beta1patch.NewHelper(byoHost, k8sClient)
-				byoHost.Status.MachineRef = &corev1.ObjectReference{
-					APIVersion: byoMachine.APIVersion,
-					Kind:       byoMachine.Kind,
-					Namespace:  byoMachine.Namespace,
-					Name:       byoMachine.Name,
-					UID:        byoMachine.UID,
+				byoHost.Spec.ByoMachineRef = &infrastructurev1beta1.ByoMachineReference{
+					Name: byoMachine.Name,
+					UID:  byoMachine.UID,
 				}
 
 				fakeBootstrapSecret := builder.Secret(ns.Name, fakeBootstrapSecret).Build()

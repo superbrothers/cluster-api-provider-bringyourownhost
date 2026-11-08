@@ -15,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/cluster-api/controllers/clustercache"
@@ -52,10 +50,10 @@ const (
 	// DefaultRequeuePeriod is the default interval to check again while a
 	// controller waits for a resource, such as a free ByoHost.
 	DefaultRequeuePeriod = 10 * time.Second
-	// claimConflictRequeueAfter is the delay to pick a ByoHost again after
-	// another writer has changed the ByoHost that the ByoMachine was claiming.
-	// It is short, as the ByoMachine does not wait for a resource, and gives
-	// the cache time to catch up.
+	// claimConflictRequeueAfter is the delay to pick a ByoHost again, or to
+	// detach it again, after another writer has changed the ByoHost that the
+	// ByoMachine was claiming or detaching. It is short, as the ByoMachine does
+	// not wait for a resource, and gives the cache time to catch up.
 	claimConflictRequeueAfter = 1 * time.Second
 )
 
@@ -87,8 +85,7 @@ type ByoMachineReconciler struct {
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byomachines/finalizers,verbs=update
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byohosts,verbs=get;list;watch
-// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byohosts/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=byohosts,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=*,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;machines,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch
@@ -166,7 +163,7 @@ func (r *ByoMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}()
 
 	// Fetch the BYOHost which is referencing this machine, if any
-	refByoHost, err := r.FetchAttachedByoHost(ctx, byoMachine.Name, byoMachine.Namespace)
+	refByoHost, err := r.FetchAttachedByoHost(ctx, byoMachine)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -203,52 +200,114 @@ func (r *ByoMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return r.reconcileNormal(ctx, machineScope)
 }
 
-// FetchAttachedByoHost fetches BYOHost attached to this machine
-func (r *ByoMachineReconciler) FetchAttachedByoHost(ctx context.Context, byomachineName, byomachineNamespace string) (*infrav1.ByoHost, error) {
+// FetchAttachedByoHost returns the ByoHost attached to the ByoMachine, or nil
+// when there is none. The ByoHost refers to the ByoMachine in
+// spec.byoMachineRef by its name and UID. A ByoHost that refers to an earlier
+// ByoMachine of the same name, which is left when an administrator removes the
+// finalizer of a ByoMachine, is not attached to this one.
+func (r *ByoMachineReconciler) FetchAttachedByoHost(ctx context.Context, byoMachine *infrav1.ByoMachine) (*infrav1.ByoHost, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Fetching an attached ByoHost")
 
-	selector := labels.NewSelector()
-	byohostLabels, _ := labels.NewRequirement(infrav1.AttachedByoMachineLabel, selection.Equals, []string{byomachineNamespace + "." + byomachineName})
-	selector = selector.Add(*byohostLabels)
 	hostsList := &infrav1.ByoHostList{}
 	// A ByoMachine only takes a ByoHost in its own namespace (see attachByoHost).
 	err := r.Client.List(
 		ctx,
 		hostsList,
-		client.InNamespace(byomachineNamespace),
-		&client.ListOptions{LabelSelector: selector},
+		client.InNamespace(byoMachine.Namespace),
+		client.MatchingFields{byoHostByoMachineNameField: byoMachine.Name},
 	)
 	if err != nil {
 		return nil, err
 	}
-	var refByoHost *infrav1.ByoHost = nil
-	if len(hostsList.Items) > 0 {
-		refByoHost = &hostsList.Items[0]
-		logger.Info("Successfully fetched an attached Byohost", "byohost", refByoHost.Name)
-		if len(hostsList.Items) > 1 {
-			errMsg := "more than one Byohost object attached to this Byomachine object. Only take one of it, please take care of the rest manually"
-			logger.Error(errors.New(errMsg), errMsg)
+	var attached *infrav1.ByoHost
+	for i := range hostsList.Items {
+		host := &hostsList.Items[i]
+		if host.Spec.ByoMachineRef == nil || host.Spec.ByoMachineRef.UID != byoMachine.UID {
+			logger.Info("Ignoring a ByoHost that is attached to an earlier ByoMachine of the same name", "byohost", host.Name)
+			continue
 		}
+		if attached != nil {
+			logger.Info("Ignoring a ByoHost, as more than one ByoHost is attached to the ByoMachine", "byohost", host.Name, "attachedByoHost", attached.Name)
+			continue
+		}
+		attached = host
 	}
-	return refByoHost, nil
+	return attached, nil
 }
 
+// reconcileDelete detaches the ByoHost from the ByoMachine after the agent has
+// reset the host, so that the host can be attached again. The ByoMachine, and
+// so its Machine, is not deleted until then.
 func (r *ByoMachineReconciler) reconcileDelete(ctx context.Context, machineScope *byoMachineScope) (reconcile.Result, error) {
 	logger := log.FromContext(ctx).WithValues("cluster", machineScope.Cluster.Name)
 	logger.Info("Deleting ByoMachine")
-	if machineScope.ByoHost != nil {
-		// Add annotation to trigger host cleanup
-		logger.Info("Releasing ByoHost", "byohost", machineScope.ByoHost.Name)
-		if err := r.markHostForCleanup(ctx, machineScope); err != nil {
-			return ctrl.Result{}, err
-		}
-		r.Recorder.Eventf(machineScope.ByoHost, machineScope.ByoMachine, corev1.EventTypeNormal, "ByoHostReleaseSucceeded", "ReleaseByoHost", "ByoHost Released by %s", machineScope.ByoMachine.Name)
-		r.Recorder.Eventf(machineScope.ByoMachine, machineScope.ByoHost, corev1.EventTypeNormal, "ByoHostReleaseSucceeded", "ReleaseByoHost", "Released ByoHost %s", machineScope.ByoHost.Name)
+
+	host := machineScope.ByoHost
+	if host == nil {
+		controllerutil.RemoveFinalizer(machineScope.ByoMachine, infrav1.MachineFinalizer)
+		return reconcile.Result{}, nil
 	}
 
-	controllerutil.RemoveFinalizer(machineScope.ByoMachine, infrav1.MachineFinalizer)
+	if isHostReset(host) {
+		logger.Info("Detaching the ByoHost, which the agent has reset", "byohost", host.Name)
+		res, err := r.detachByoHost(ctx, host)
+		if err != nil || !res.IsZero() {
+			return res, err
+		}
+		r.Recorder.Eventf(host, machineScope.ByoMachine, corev1.EventTypeNormal, "ByoHostReleaseSucceeded", "ReleaseByoHost", "ByoHost Released by %s", machineScope.ByoMachine.Name)
+		r.Recorder.Eventf(machineScope.ByoMachine, host, corev1.EventTypeNormal, "ByoHostReleaseSucceeded", "ReleaseByoHost", "Released ByoHost %s", host.Name)
+		controllerutil.RemoveFinalizer(machineScope.ByoMachine, infrav1.MachineFinalizer)
+		return reconcile.Result{}, nil
+	}
+
+	if !host.Spec.ResetRequested {
+		logger.Info("Requesting the agent to reset the ByoHost", "byohost", host.Name)
+		base := host.DeepCopy()
+		host.Spec.ResetRequested = true
+		if err := r.Client.Patch(ctx, host, client.MergeFrom(base)); err != nil {
+			logger.Error(err, "failed to request the reset of the byohost", "byohost", host.Name)
+			return ctrl.Result{}, err
+		}
+		r.Recorder.Eventf(host, machineScope.ByoMachine, corev1.EventTypeNormal, "ByoHostResetRequested", "ResetByoHost", "Reset requested by ByoMachine %s", machineScope.ByoMachine.Name)
+		r.Recorder.Eventf(machineScope.ByoMachine, host, corev1.EventTypeNormal, "ByoHostResetRequested", "ResetByoHost", "Requested the reset of ByoHost %s", host.Name)
+	}
+
+	// The ByoHost watch reconciles the ByoMachine again when the agent reports
+	// the reset.
+	logger.Info("Waiting for the agent to reset the ByoHost", "byohost", host.Name)
+	v1beta1conditions.MarkFalse(machineScope.ByoMachine, infrav1.BYOHostReady, infrav1.WaitingForHostResetReason, clusterv1beta1.ConditionSeverityInfo, "")
 	return reconcile.Result{}, nil
+}
+
+// isHostReset returns whether the agent has reset the host for its current
+// attachment. The UID tells the attachments apart, so that a report for an
+// earlier ByoMachine does not detach the host.
+func isHostReset(host *infrav1.ByoHost) bool {
+	return host.Spec.ByoMachineRef != nil &&
+		host.Status.LastReset != nil &&
+		host.Status.LastReset.ByoMachineUID == host.Spec.ByoMachineRef.UID
+}
+
+// detachByoHost clears the fields of the attachment in the spec of the ByoHost,
+// which returns the host to the free hosts. It uses optimistic locking, so that
+// it never clears an attachment that it has not read.
+func (r *ByoMachineReconciler) detachByoHost(ctx context.Context, host *infrav1.ByoHost) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	base := host.DeepCopy()
+	host.Spec.ByoMachineRef = nil
+	host.Spec.ResetRequested = false
+	host.Spec.BootstrapSecret = nil
+	host.Spec.InstallationSecret = nil
+	err := r.Client.Patch(ctx, host, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
+	if apierrors.IsConflict(err) {
+		logger.Info("ByoHost changed while detaching it, trying again", "byohost", host.Name)
+		return ctrl.Result{RequeueAfter: claimConflictRequeueAfter}, nil
+	}
+	if err != nil {
+		logger.Error(err, "failed to detach the byohost", "byohost", host.Name)
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope *byoMachineScope) (reconcile.Result, error) {
@@ -256,10 +315,6 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 	logger.Info("Reconciling ByoMachine")
 
 	controllerutil.AddFinalizer(machineScope.ByoMachine, infrav1.MachineFinalizer)
-
-	if err := r.reconcileAttachedByoHost(ctx, machineScope); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	if machineScope.ByoMachine.Spec.InstallerRef != nil {
 		if err := r.createInstallerConfig(ctx, machineScope); err != nil {
@@ -345,12 +400,16 @@ func (r *ByoMachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 	logger := ctrl.LoggerFrom(ctx)
 	ClusterToByoMachines := r.ClusterToByoMachines(logger)
 
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &infrav1.ByoHost{}, byoHostByoMachineNameField, byoHostByoMachineName); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(controlledType).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Watches(
 			&infrav1.ByoHost{},
-			handler.EnqueueRequestsFromMapFunc(ByoHostToByoMachineMapFunc(controlledTypeGVK)),
+			handler.EnqueueRequestsFromMapFunc(ByoHostToByoMachine),
 		).
 		// Watch the CAPI resource that owns this infrastructure resource
 		Watches(
@@ -488,33 +547,52 @@ func (r *ByoMachineReconciler) getInstallerConfigAndStatus(ctx context.Context, 
 	return installerConfig, ready, nil
 }
 
+// byoHostByoMachineNameField is the index of the ByoHosts by the name of the
+// ByoMachine in spec.byoMachineRef, or "" for the free ByoHosts. The API server
+// cannot select the ByoHosts by whether a field is set, so the ByoMachine
+// controller looks them up in the cache with this index.
+const byoHostByoMachineNameField = "spec.byoMachineRef.name"
+
+// byoHostByoMachineName returns the value of byoHostByoMachineNameField of a
+// ByoHost.
+func byoHostByoMachineName(o client.Object) []string {
+	host, ok := o.(*infrav1.ByoHost)
+	if !ok {
+		return nil
+	}
+	if host.Spec.ByoMachineRef == nil {
+		return []string{""}
+	}
+	return []string{host.Spec.ByoMachineRef.Name}
+}
+
 func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *byoMachineScope) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("cluster", machineScope.Cluster.Name)
-	var selector labels.Selector
-	var err error
 	if machineScope.ByoHost != nil {
 		return ctrl.Result{}, nil
 	}
 
-	hostsList := &infrav1.ByoHostList{}
-	// LabelSelector filter for byohosts
+	selector := labels.Everything()
 	if machineScope.ByoMachine.Spec.Selector != nil {
+		var err error
 		selector, err = metav1.LabelSelectorAsSelector(machineScope.ByoMachine.Spec.Selector)
 		if err != nil {
 			logger.Error(err, "Label Selector as selector failed")
 			return ctrl.Result{}, err
 		}
-	} else {
-		selector = labels.NewSelector()
 	}
 
-	byohostLabels, _ := labels.NewRequirement(clusterv1.ClusterNameLabel, selection.DoesNotExist, nil)
-	selector = selector.Add(*byohostLabels)
-
-	// Take only a ByoHost in the namespace of the ByoMachine. clusterctl move
-	// carries only the objects in the namespace of the cluster, so the ByoHost
-	// of a cluster must be in the same namespace to move with it.
-	err = r.Client.List(ctx, hostsList, client.InNamespace(machineScope.ByoMachine.Namespace), &client.ListOptions{LabelSelector: selector})
+	// Take only a free ByoHost in the namespace of the ByoMachine. clusterctl
+	// move carries only the objects in the namespace of the cluster, so the
+	// ByoHost of a cluster must be in the same namespace to move with it.
+	hostsList := &infrav1.ByoHostList{}
+	err := r.Client.List(
+		ctx,
+		hostsList,
+		client.InNamespace(machineScope.ByoMachine.Namespace),
+		client.MatchingLabelsSelector{Selector: selector},
+		client.MatchingFields{byoHostByoMachineNameField: ""},
+	)
 	if err != nil {
 		logger.Error(err, "failed to list byohosts")
 		return ctrl.Result{}, err
@@ -532,25 +610,24 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 	host := hostsList.Items[0]
 	base := host.DeepCopy()
 
-	// Set the cluster Label
-	hostLabels := host.Labels
-	if hostLabels == nil {
-		hostLabels = make(map[string]string)
+	host.Spec.ByoMachineRef = &infrav1.ByoMachineReference{
+		Name: machineScope.ByoMachine.Name,
+		UID:  machineScope.ByoMachine.UID,
 	}
-	hostLabels[clusterv1.ClusterNameLabel] = machineScope.ByoMachine.Labels[clusterv1.ClusterNameLabel]
-	hostLabels[infrav1.AttachedByoMachineLabel] = machineScope.ByoMachine.Namespace + "." + machineScope.ByoMachine.Name
-	host.Labels = hostLabels
-
 	host.Spec.BootstrapSecret = &corev1.ObjectReference{
 		Kind:      "Secret",
 		Namespace: machineScope.ByoMachine.Namespace,
 		Name:      *machineScope.Machine.Spec.Bootstrap.DataSecretName,
 	}
+	// Clear what an earlier attachment may have left, when an administrator
+	// has detached the host by hand.
+	host.Spec.InstallationSecret = nil
+	host.Spec.ResetRequested = false
 
-	// Claim the host with the labels, with optimistic locking: the patch fails
-	// with a conflict when the host has changed since it was read, for example
-	// when another ByoMachine has claimed it. Without the lock, the last patch
-	// would win, and two ByoMachines would take the same host.
+	// Claim the host with optimistic locking: the patch fails with a conflict
+	// when the host has changed since it was read, for example when another
+	// ByoMachine has claimed it. Without the lock, the last patch would win,
+	// and two ByoMachines would take the same host.
 	err = r.Client.Patch(ctx, &host, client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}))
 	if apierrors.IsConflict(err) {
 		logger.Info("ByoHost changed while claiming it, picking a host again", "byohost", host.Name)
@@ -561,87 +638,26 @@ func (r *ByoMachineReconciler) attachByoHost(ctx context.Context, machineScope *
 		return ctrl.Result{}, err
 	}
 
-	if err := r.setMachineRef(ctx, machineScope, &host); err != nil {
-		return ctrl.Result{}, err
-	}
 	logger.Info("Successfully attached Byohost", "byohost", host.Name)
 	machineScope.ByoHost = &host
 	return ctrl.Result{}, nil
 }
 
-// reconcileAttachedByoHost makes sure that the ByoHost attached to the
-// ByoMachine, if any, has status.machineRef. The ByoMachine claims the host
-// with the labels before it sets status.machineRef, which the agent waits for,
-// so set it again when setting it has failed.
-func (r *ByoMachineReconciler) reconcileAttachedByoHost(ctx context.Context, machineScope *byoMachineScope) error {
-	if machineScope.ByoHost == nil {
+// ByoHostToByoMachine is a handler.MapFunc that returns a reconciliation
+// request for the ByoMachine that a ByoHost is attached to.
+func ByoHostToByoMachine(_ context.Context, o client.Object) []reconcile.Request {
+	h, ok := o.(*infrav1.ByoHost)
+	if !ok || h.Spec.ByoMachineRef == nil {
 		return nil
 	}
-	if machineScope.ByoHost.Status.MachineRef == nil {
-		return r.setMachineRef(ctx, machineScope, machineScope.ByoHost)
-	}
-	return nil
-}
-
-// setMachineRef sets the ByoMachine to status.machineRef of the ByoHost that
-// the ByoMachine has claimed with the labels.
-func (r *ByoMachineReconciler) setMachineRef(ctx context.Context, machineScope *byoMachineScope, host *infrav1.ByoHost) error {
-	base := host.DeepCopy()
-	host.Status.MachineRef = &corev1.ObjectReference{
-		APIVersion: machineScope.ByoMachine.APIVersion,
-		Kind:       machineScope.ByoMachine.Kind,
-		Namespace:  machineScope.ByoMachine.Namespace,
-		Name:       machineScope.ByoMachine.Name,
-		UID:        machineScope.ByoMachine.UID,
-	}
-	if err := r.Client.Status().Patch(ctx, host, client.MergeFrom(base)); err != nil {
-		log.FromContext(ctx).Error(err, "failed to patch the status of byohost", "byohost", host.Name)
-		return err
-	}
-	return nil
-}
-
-// ByoHostToByoMachineMapFunc returns a handler.ToRequestsFunc that watches for
-// Machine events and returns reconciliation requests for an infrastructure provider object
-func ByoHostToByoMachineMapFunc(gvk schema.GroupVersionKind) handler.MapFunc {
-	return func(_ context.Context, o client.Object) []reconcile.Request {
-		h, ok := o.(*infrav1.ByoHost)
-		if !ok {
-			return nil
-		}
-		if h.Status.MachineRef == nil {
-			// TODO, we can enqueue byomachine which providerID is nil to get better performance than requeue
-			return nil
-		}
-
-		gk := gvk.GroupKind()
-		// Return early if the GroupKind doesn't match what we expect
-		byomachineGK := h.Status.MachineRef.GroupVersionKind().GroupKind()
-		if gk != byomachineGK {
-			return nil
-		}
-
-		return []reconcile.Request{
-			{
-				NamespacedName: client.ObjectKey{
-					Namespace: h.Status.MachineRef.Namespace,
-					Name:      h.Status.MachineRef.Name,
-				},
+	return []reconcile.Request{
+		{
+			NamespacedName: client.ObjectKey{
+				Namespace: h.Namespace,
+				Name:      h.Spec.ByoMachineRef.Name,
 			},
-		}
+		},
 	}
-}
-
-func (r *ByoMachineReconciler) markHostForCleanup(ctx context.Context, machineScope *byoMachineScope) error {
-	helper, _ := v1beta1patch.NewHelper(machineScope.ByoHost, r.Client)
-
-	if machineScope.ByoHost.Annotations == nil {
-		machineScope.ByoHost.Annotations = map[string]string{}
-	}
-	machineScope.ByoHost.Annotations[infrav1.HostCleanupAnnotation] = ""
-
-	// Issue the patch for byohost
-	return helper.Patch(ctx, machineScope.ByoHost)
 }
 
 func (r *ByoMachineReconciler) getInstallerConfig(ctx context.Context, byoMachine *infrav1.ByoMachine) (*unstructured.Unstructured, error) {
