@@ -7,19 +7,26 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
+	controlplanev1 "sigs.k8s.io/cluster-api/api/controlplane/kubeadm/v1beta2"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/test/framework/clusterctl"
 	"sigs.k8s.io/cluster-api/util"
+	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
+var _ = Describe("Cluster upgrade test without spare hosts [K8s-upgrade]", func() {
 
 	var (
 		ctx              context.Context
@@ -52,18 +59,24 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 		kubernetesVersionUpgradeFrom := e2eConfig.MustGetVariable(KubernetesVersionUpgradeFrom)
 		kubernetesVersionUpgradeTo := e2eConfig.MustGetVariable(KubernetesVersionUpgradeTo)
 
-		// The KubeadmControlPlane rolls out with maxSurge 1, so it needs a spare
-		// control plane host for the new machine. The MachineDeployment rolls
-		// out with maxSurge 0: it deletes the old machine first, and the new
-		// machine reuses the host that the agent has reset.
-		By("Creating byohost capacity pool containing 2 control plane hosts and 1 worker host")
-		hosts.Start(ctx, namespace.Name, []byoHost{
-			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
-			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole},
-			{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: workerRole},
-		})
+		// There are as many hosts as machines. Both the KubeadmControlPlane
+		// (CONTROL_PLANE_MAX_SURGE, which can be 0 only with 3 or more
+		// machines) and the MachineDeployment (the template) roll out with
+		// maxSurge 0: they delete an old machine first, and the new machine
+		// reuses the host that the agent has reset. The ClusterClass upgrade
+		// spec covers the control plane with maxSurge 1 and a spare host.
+		By("Creating byohost capacity pool containing 3 control plane hosts and 1 worker host")
+		pool := []byoHost{{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: workerRole}}
+		for range 3 {
+			pool = append(pool, byoHost{Name: fmt.Sprintf("byohost-%s", util.RandomString(6)), Role: controlPlaneRole})
+		}
+		hosts.Start(ctx, namespace.Name, pool)
+		var hostNames []string
+		for _, host := range pool {
+			hostNames = append(hostNames, host.Name)
+		}
 
-		By("creating a workload cluster with one control plane node and one worker node")
+		By("creating a workload cluster with three control plane nodes and one worker node")
 		clusterctl.ApplyClusterTemplateAndWait(ctx, clusterctl.ApplyClusterTemplateAndWaitInput{
 			ClusterProxy: bootstrapClusterProxy,
 			ConfigCluster: clusterctl.ConfigClusterInput{
@@ -75,13 +88,20 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 				Namespace:                namespace.Name,
 				ClusterName:              clusterName,
 				KubernetesVersion:        kubernetesVersionUpgradeFrom,
-				ControlPlaneMachineCount: ptr.To[int64](1),
+				ControlPlaneMachineCount: ptr.To[int64](3),
 				WorkerMachineCount:       ptr.To[int64](1),
+				ClusterctlVariables:      map[string]string{"CONTROL_PLANE_MAX_SURGE": "0"},
 			},
 			WaitForClusterIntervals:      e2eConfig.GetIntervals(specName, "wait-cluster"),
 			WaitForControlPlaneIntervals: e2eConfig.GetIntervals(specName, "wait-control-plane"),
 			WaitForMachineDeployments:    e2eConfig.GetIntervals(specName, "wait-worker-nodes"),
 		}, clusterResources)
+		Expect(clusterResources.ControlPlane.Spec.Rollout.Strategy.RollingUpdate.MaxSurge).To(HaveValue(Equal(intstr.FromInt32(0))))
+
+		// Record the machines, to check that the upgrade replaces all of them.
+		// The nodes are named after the hosts.
+		oldMachines := machineNodes(ctx, clusterResources.Cluster)
+		Expect(slices.Collect(maps.Values(oldMachines))).To(ConsistOf(hostNames))
 
 		// The etcd and CoreDNS image tags are left empty, so that kubeadm
 		// upgrades them to its defaults for the new version, and the framework
@@ -114,6 +134,30 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 			Count:             int(clusterResources.ExpectedTotalNodes()),
 			WaitForNodesReady: e2eConfig.GetIntervals(specName, "wait-nodes-ready"),
 		})
+
+		// The control plane runs with one machine fewer during the rollout, so
+		// check that it and etcd have all their members again.
+		framework.WaitForControlPlaneToBeReady(ctx, framework.WaitForControlPlaneToBeReadyInput{
+			Getter:       bootstrapClusterProxy.GetClient(),
+			ControlPlane: clusterResources.ControlPlane,
+		}, e2eConfig.GetIntervals(specName, "wait-control-plane")...)
+
+		By("Waiting until etcd has a healthy member on each control plane machine")
+		Eventually(func(g Gomega) {
+			kcp := &controlplanev1.KubeadmControlPlane{}
+			g.Expect(bootstrapClusterProxy.GetClient().Get(ctx, client.ObjectKeyFromObject(clusterResources.ControlPlane), kcp)).To(Succeed())
+			g.Expect(conditions.IsTrue(kcp, controlplanev1.KubeadmControlPlaneEtcdClusterHealthyCondition)).To(BeTrue(),
+				"the condition %s of the KubeadmControlPlane is not true", controlplanev1.KubeadmControlPlaneEtcdClusterHealthyCondition)
+		}, e2eConfig.GetIntervals(specName, "wait-control-plane")...).Should(Succeed())
+
+		// There are no spare hosts, so the new machines are on the hosts of the
+		// old ones.
+		By("Checking that the new machines reuse the hosts of the old ones")
+		newMachines := machineNodes(ctx, clusterResources.Cluster)
+		for name := range newMachines {
+			Expect(oldMachines).NotTo(HaveKey(name), "the machine %s has not been replaced", name)
+		}
+		Expect(slices.Collect(maps.Values(newMachines))).To(ConsistOf(hostNames))
 	})
 
 	JustAfterEach(func() {
@@ -137,3 +181,20 @@ var _ = Describe("Cluster upgrade test [K8s-upgrade]", func() {
 		}
 	})
 })
+
+// machineNodes returns the names of the nodes of the machines of the cluster
+// by the names of the machines.
+func machineNodes(ctx context.Context, cluster *clusterv1.Cluster) map[string]string {
+	machines := framework.GetMachinesByCluster(ctx, framework.GetMachinesByClusterInput{
+		Lister:      bootstrapClusterProxy.GetClient(),
+		ClusterName: cluster.Name,
+		Namespace:   cluster.Namespace,
+	})
+	nodes := make(map[string]string, len(machines))
+	for i := range machines {
+		m := &machines[i]
+		Expect(m.Status.NodeRef.IsDefined()).To(BeTrue(), "the machine %s has no node", m.Name)
+		nodes[m.Name] = m.Status.NodeRef.Name
+	}
+	return nodes
+}
