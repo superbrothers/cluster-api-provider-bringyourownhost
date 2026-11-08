@@ -244,14 +244,4 @@ GINKGO_FOCUS="\[K8s-upgrade\]" make test-e2e
 On GitHub Actions, the `e2e-suite` workflow runs `[PR-Blocking]` on amd64 for the pull requests that are not drafts, and all the specs on amd64 and arm64 every week. Run it from the Actions tab or with `gh workflow run e2e.yml --ref <branch>` to run all the specs on a branch, or the specs that the input `focus` matches.
 
 # Host Agent Installer
-The installer provides the scripts that install and uninstall the Kubernetes components on the hosts. See [installer](./installer.md) for the supported OSes and how it works.
-
-## Pre-requisites
-As of writing this, the following packages must be pre-installed on the BYOH host:
-- socat
-- ebtables
-- ethtool
-- conntrack
-```shell
-sudo apt-get install socat ebtables ethtool conntrack
-```
+The installer provides the scripts that install and uninstall the Kubernetes components on the hosts. See [installer](./installer.md) for the supported OSes and how it works. The hosts need no packages installed beforehand.

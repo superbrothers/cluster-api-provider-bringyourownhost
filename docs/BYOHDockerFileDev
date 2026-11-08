@@ -4,8 +4,8 @@ ARG TARGETARCH
 # install containerd
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        systemd conntrack iptables iproute2 ethtool socat util-linux mount \
-        ebtables kmod libseccomp2 pigz bash ca-certificates \
+        systemd iptables iproute2 util-linux mount \
+        kmod libseccomp2 pigz bash ca-certificates \
         rsync nfs-common fuse-overlayfs containerd curl gnupg2 \
     && mkdir -p /etc/containerd \
     && containerd config default | tee /etc/containerd/config.toml \

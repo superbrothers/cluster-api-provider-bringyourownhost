@@ -143,15 +143,7 @@ done
 
 ---
 ### VM Prerequisites
-- The following packages must be pre-installed on the VMs
-  - socat
-  - ebtables
-  - ethtool
-  - conntrack
-- You can install these with
-``` shell
-sudo apt-get install socat ebtables ethtool conntrack
-```
+- No packages need to be installed beforehand. The installer installs containerd, runc and the Kubernetes packages when a host is attached to a machine.
 - The output of `hostname` should be added to `/etc/hosts`
 
 Example:
