@@ -2,17 +2,63 @@ name: Draft Release
 
 on:
   push:
-    # Build and publish artifacts when new tag is created for release
     tags:
       - "v*.*.*"
 
-jobs:
-  build:
-    runs-on: ubuntu-24.04
-    steps:
+permissions:
+  contents: read
 
+env:
+  IMG: ghcr.io/superbrothers/cluster-api-byoh-controller:${{ github.ref_name }}
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The default docker driver cannot build images for multiple platforms.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and push the manager image for amd64 and arm64
+        run: make docker-buildx DOCKER_BUILDX_PUSH=true IMG="${IMG}"
+
+  release:
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      # The assets of the release in _dist, as globs. Both the checksums and the
+      # upload use this list, so that checksums.txt covers every asset.
+      ASSETS: |-
+        byoh-hostagent-linux-amd64
+        byoh-hostagent-linux-arm64
+        byoh-hostagent_*.deb
+        cluster-template.yaml
+        cluster-template-topology.yaml
+        clusterclass-quickstart.yaml
+        cluster-template-docker.yaml
+        cluster-template-topology-docker.yaml
+        clusterclass-quickstart-docker.yaml
+        infrastructure-components.yaml
+        metadata.yaml
+    steps:
+      # The version of the agent comes from git describe, which needs the tags.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -20,24 +66,29 @@ jobs:
           go-version-file: go.mod
 
       - name: Build Release Artifacts
-        run: IMG="projects.registry.vmware.com/cluster_api_provider_bringyourownhost/cluster-api-byoh-controller:${{ github.ref_name }}" make build-release-artifacts
+        run: make build-release-artifacts IMG="${IMG}" DEB_VERSION="${GITHUB_REF_NAME#v}"
 
-      - name: Publish Release
+      # The users check the downloads with "sha256sum --check checksums.txt",
+      # so the file names have no directory. failglob fails the step when a
+      # glob matches nothing, and sha256sum fails when a file is missing.
+      - name: Generate the checksums of the assets
+        working-directory: _dist
+        shell: bash
+        run: |
+          shopt -s failglob
+          # shellcheck disable=SC2086 # split ASSETS into the globs and expand them
+          sha256sum ${ASSETS} > checksums.txt
+          cat checksums.txt
+
+      - name: Create the draft release
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: true
+          # Tags such as v0.6.0-rc.0 are pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          working_directory: _dist
           files: |
-            _dist/byoh-hostagent-linux-amd64
-            _dist/byoh-hostagent-linux-arm64
-            _dist/cluster-template.yaml
-            _dist/cluster-template-topology.yaml
-            _dist/clusterclass-quickstart.yaml
-            _dist/cluster-template-docker.yaml
-            _dist/cluster-template-topology-docker.yaml
-            _dist/clusterclass-quickstart-docker.yaml
-            _dist/infrastructure-components.yaml
-            _dist/metadata.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            ${{ env.ASSETS }}
+            checksums.txt
