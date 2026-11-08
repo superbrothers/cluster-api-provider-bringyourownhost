@@ -236,6 +236,8 @@ Run the specs that have a label, for example:
 GINKGO_FOCUS="\[PR-Blocking\]" make test-e2e
 ```
 
+On GitHub Actions, the `e2e-suite` workflow runs `[PR-Blocking]` for the pull requests that are not drafts, and all the specs every week. Run it from the Actions tab or with `gh workflow run e2e.yml --ref <branch>` to run all the specs on a branch, or the specs that the input `focus` matches.
+
 # Host Agent Installer
 The installer provides the scripts that install and uninstall the Kubernetes components on the hosts. See [installer](./installer.md) for the supported OSes and how it works.
 

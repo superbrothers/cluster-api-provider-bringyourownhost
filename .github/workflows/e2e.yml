@@ -1,13 +1,42 @@
 name: e2e-suite
 
-# The e2e tests have not been reworked yet, so they run only on demand until
-# they are.
+# Pull requests run only the [PR-Blocking] spec, as each spec creates clusters
+# on the hosts in containers; drafts are skipped, and a pull request runs it
+# when it is marked ready for review. All the specs run every week and on
+# demand.
 on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths-ignore:
+    - '*.md'
+    - 'docs/**'
+    - 'LICENSE'
+    - 'NOTICE'
+    - 'PROJECT'
+  schedule:
+  # Every Sunday at 19:17 UTC.
+  - cron: '17 19 * * 0'
   workflow_dispatch:
+    inputs:
+      focus:
+        description: 'The regular expression of the specs to run (GINKGO_FOCUS). Empty runs all the specs.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the run for the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  e2e-pr-blocking:
+  e2e:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
+    timeout-minutes: 150
     steps:
     - name: Checkout code
       uses: actions/checkout@v7
@@ -28,8 +57,19 @@ jobs:
     - name: Raise the inotify limits
       run: sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
 
-    - name: Run Cluster Class e2e tests
-      run: yes | GINKGO_FOCUS="\[Cluster-Class\]" make test-e2e
+    # Ginkgo stops the whole suite after 1h by default.
+    - name: Run the e2e tests
+      env:
+        GINKGO_FOCUS: ${{ github.event_name == 'pull_request' && '\[PR-Blocking\]' || inputs.focus }}
+        GINKGO_NOCOLOR: 'true'
+        GINKGO_ARGS: --timeout=2h
+      run: yes | make test-e2e
 
-    - name: Run PR-Blocking e2e tests
-      run: yes | GINKGO_FOCUS="\[PR-Blocking\]" make test-e2e
+    # The logs of the controllers and the dumps of the resources.
+    - name: Upload the artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: e2e-artifacts
+        path: _artifacts
+        retention-days: 7
