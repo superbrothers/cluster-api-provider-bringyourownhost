@@ -45,10 +45,6 @@ var (
 	dockerClient           *dClient.Client
 )
 
-const (
-	K8sVersion = "v1.22.3"
-)
-
 func TestHostAgent(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Agent Suite")

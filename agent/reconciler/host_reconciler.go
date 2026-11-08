@@ -317,7 +317,4 @@ func (r *HostReconciler) removeAnnotations(ctx context.Context, byoHost *infrast
 
 	// Remove the cleanup annotation
 	delete(byoHost.Annotations, infrastructurev1beta1.HostCleanupAnnotation)
-
-	// Remove the cluster version annotation
-	delete(byoHost.Annotations, infrastructurev1beta1.K8sVersionAnnotation)
 }

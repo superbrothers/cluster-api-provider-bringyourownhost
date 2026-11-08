@@ -12,7 +12,9 @@ import (
 const (
 	// HostCleanupAnnotation annotation used to mark a host for cleanup
 	HostCleanupAnnotation = "byoh.infrastructure.cluster.x-k8s.io/unregistering"
-	// K8sVersionAnnotation annotation used to store the k8s version
+	// K8sVersionAnnotation is the annotation of a K8sInstallerConfig with the
+	// version of Kubernetes to install. The ByoMachine controller sets it from
+	// the version of the Machine when it creates the K8sInstallerConfig.
 	K8sVersionAnnotation = "byoh.infrastructure.cluster.x-k8s.io/k8sversion"
 	// AttachedByoMachineLabel label used to mark a node name attached to a byo host
 	AttachedByoMachineLabel = "byoh.infrastructure.cluster.x-k8s.io/byomachine-name"

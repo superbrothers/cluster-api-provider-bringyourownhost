@@ -289,8 +289,6 @@ var _ = Describe("Agent", func() {
 					Name:       byoMachine.Name,
 					UID:        byoMachine.UID,
 				}
-				byoHost.Annotations = map[string]string{}
-				byoHost.Annotations[infrastructurev1beta1.K8sVersionAnnotation] = K8sVersion
 
 				fakeBootstrapSecret := builder.Secret(ns.Name, fakeBootstrapSecret).Build()
 				err := k8sClient.Create(ctx, fakeBootstrapSecret)
