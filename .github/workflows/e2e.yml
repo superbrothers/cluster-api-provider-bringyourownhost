@@ -1,9 +1,9 @@
 name: e2e-suite
 
-# Pull requests run only the [PR-Blocking] spec, as each spec creates clusters
-# on the hosts in containers; drafts are skipped, and a pull request runs it
-# when it is marked ready for review. All the specs run every week and on
-# demand.
+# Pull requests run only the [PR-Blocking] spec on amd64, as each spec creates
+# clusters on the hosts in containers; drafts are skipped, and a pull request
+# runs it when it is marked ready for review. All the specs run on amd64 and
+# arm64 every week and on demand.
 on:
   pull_request:
     branches: [ main ]
@@ -35,7 +35,13 @@ concurrency:
 jobs:
   e2e:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # arm64 runs the controller, the agent, the installer and the hosts on
+        # the architecture of the Raspberry Pis. Pull requests run only amd64.
+        runner: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04"]' || '["ubuntu-24.04", "ubuntu-24.04-arm"]') }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     steps:
     - name: Checkout code
@@ -71,6 +77,6 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v7
       with:
-        name: e2e-artifacts
+        name: e2e-artifacts-${{ matrix.runner }}
         path: _artifacts
         retention-days: 7
