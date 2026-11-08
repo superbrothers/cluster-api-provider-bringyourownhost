@@ -183,6 +183,10 @@ test-e2e: take-user-input docker-build prepare-byoh-docker-host-image $(GINKGO) 
 	    -e2e.skip-resource-cleanup=$(SKIP_RESOURCE_CLEANUP) -e2e.use-existing-cluster=$(USE_EXISTING_CLUSTER) \
 		-e2e.existing-cluster-kubeconfig-path=$(EXISTING_CLUSTER_KUBECONFIG_PATH)
 
+# The pull requests run only this spec, which is the one to run locally first.
+test-e2e-pr-blocking: GINKGO_FOCUS := \[PR-Blocking\]
+test-e2e-pr-blocking: test-e2e ## Run the [PR-Blocking] end-to-end test, which the pull requests run
+
 cluster-templates: kustomize cluster-templates-v1beta1
 
 cluster-templates-e2e: kustomize

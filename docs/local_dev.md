@@ -231,9 +231,14 @@ The hosts are privileged containers that share the kernel of the machine that ru
 - The installer loads the kernel modules `overlay` and `br_netfilter` into the kernel of the machine.
 - `swapoff` and `swapon` do nothing in the hosts, so the tests do not turn off the swap of the machine.
 
-Run the specs that have a label, for example:
+Run `[PR-Blocking]`, the spec that the pull requests run, which takes a few minutes:
 ```shell
-GINKGO_FOCUS="\[PR-Blocking\]" make test-e2e
+make test-e2e-pr-blocking
+```
+
+Run the other specs only when a change needs them, as all of them take more than 20 minutes. `GINKGO_FOCUS` selects the specs by their names or labels, and `make test-e2e` without it runs all of them:
+```shell
+GINKGO_FOCUS="\[K8s-upgrade\]" make test-e2e
 ```
 
 On GitHub Actions, the `e2e-suite` workflow runs `[PR-Blocking]` for the pull requests that are not drafts, and all the specs every week. Run it from the Actions tab or with `gh workflow run e2e.yml --ref <branch>` to run all the specs on a branch, or the specs that the input `focus` matches.
