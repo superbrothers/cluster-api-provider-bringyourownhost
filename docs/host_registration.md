@@ -129,6 +129,8 @@ Deny a CSR that you do not expect with `kubectl certificate deny`.
 
 With the certificate, the agent gets or creates the ByoHost named `<hostname>` in the namespace of `--namespace` (`default` by default), with the labels of `--label`, and reports the network interfaces and the OS of the host in its status. The labels are set only when the ByoHost is created.
 
+A ByoMachine selects only the ByoHosts in its own namespace, so register the host in the namespace of the cluster that uses it. `clusterctl move` also moves only the objects in the namespace of the cluster.
+
 ### Restarting the agent
 
 When `~/.byoh/config` exists, the agent uses it and does not use the bootstrap kubeconfig. It registers the existing ByoHost again.
@@ -199,4 +201,3 @@ The following are known, and are planned to be changed:
 - A bootstrap token of BYOH can get a certificate of any host name, including the names of registered hosts. Planned: bind each bootstrap token to a host name for one use, and deny the CSRs for the names of registered hosts.
 - The name of the CSR is fixed for each hostname. Someone who can create CSRs can create `byoh-csr-<hostname>` first, and the host cannot get its certificate until that CSR is removed.
 - The renewal of a certificate needs a new bootstrap kubeconfig and a restart of the agent. Planned: renew with the certificate of the host.
-- A ByoMachine selects ByoHosts from all namespaces, not only from its own. Planned: select only the ByoHosts in the namespace of the ByoMachine.

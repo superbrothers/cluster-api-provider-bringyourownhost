@@ -718,6 +718,88 @@ var _ = Describe("Controllers/ByomachineController", func() {
 			})
 		})
 
+		Context("When a free ByoHost is in another namespace", func() {
+			var (
+				anotherNamespace       *corev1.Namespace
+				hostInAnotherNamespace *infrastructurev1beta1.ByoHost
+			)
+
+			BeforeEach(func() {
+				anotherNamespace = builder.Namespace("byoh-another-namespace-").Build()
+				Expect(k8sClientUncached.Create(ctx, anotherNamespace)).Should(Succeed())
+
+				hostInAnotherNamespace = builder.ByoHost(anotherNamespace.Name, "host-in-another-namespace").Build()
+				Expect(k8sClientUncached.Create(ctx, hostInAnotherNamespace)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, hostInAnotherNamespace)).Should(Succeed())
+				})
+				WaitForObjectsToBePopulatedInCache(hostInAnotherNamespace)
+				Expect(clientFake.Create(ctx, builder.Node(defaultNamespace, hostInAnotherNamespace.Name).Build())).Should(Succeed())
+			})
+
+			It("should not attach the ByoHost, and should attach one in the namespace of the ByoMachine", func() {
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(reconciler.RequeuePeriod))
+
+				untouchedHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(hostInAnotherNamespace), untouchedHost)).Should(Succeed())
+				Expect(untouchedHost.Status.MachineRef).To(BeNil())
+				Expect(untouchedHost.Labels).NotTo(HaveKey(clusterv1.ClusterNameLabel))
+				Expect(untouchedHost.Labels).NotTo(HaveKey(infrastructurev1beta1.AttachedByoMachineLabel))
+
+				createdByoMachine := &infrastructurev1beta1.ByoMachine{}
+				Expect(k8sClientUncached.Get(ctx, byoMachineLookupKey, createdByoMachine)).Should(Succeed())
+				Expect(*v1beta1conditions.Get(createdByoMachine, infrastructurev1beta1.BYOHostReady)).To(v1beta1conditions.MatchCondition(clusterv1beta1.Condition{
+					Type:     infrastructurev1beta1.BYOHostReady,
+					Status:   corev1.ConditionFalse,
+					Reason:   infrastructurev1beta1.BYOHostsUnavailableReason,
+					Severity: clusterv1beta1.ConditionSeverityInfo,
+				}))
+
+				hostInSameNamespace := builder.ByoHost(defaultNamespace, "host-in-same-namespace").Build()
+				Expect(k8sClientUncached.Create(ctx, hostInSameNamespace)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, hostInSameNamespace)).Should(Succeed())
+				})
+				WaitForObjectsToBePopulatedInCache(hostInSameNamespace)
+				Expect(clientFake.Create(ctx, builder.Node(defaultNamespace, hostInSameNamespace.Name).Build())).Should(Succeed())
+
+				res, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: byoMachineLookupKey})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.RequeueAfter).To(BeZero())
+
+				attachedHost := &infrastructurev1beta1.ByoHost{}
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(hostInSameNamespace), attachedHost)).Should(Succeed())
+				Expect(attachedHost.Status.MachineRef).NotTo(BeNil())
+				Expect(attachedHost.Status.MachineRef.Name).To(Equal(byoMachine.Name))
+				Expect(attachedHost.Labels[infrastructurev1beta1.AttachedByoMachineLabel]).To(Equal(defaultNamespace + "." + byoMachine.Name))
+
+				Expect(k8sClientUncached.Get(ctx, client.ObjectKeyFromObject(hostInAnotherNamespace), untouchedHost)).Should(Succeed())
+				Expect(untouchedHost.Status.MachineRef).To(BeNil())
+			})
+
+			It("should not take a ByoHost in another namespace as the attached one", func() {
+				// The labels say that the host is attached to the ByoMachine,
+				// but the host is in another namespace.
+				labeledHost := builder.ByoHost(anotherNamespace.Name, "labeled-host-in-another-namespace").
+					WithLabels(map[string]string{
+						clusterv1.ClusterNameLabel:                    defaultClusterName,
+						infrastructurev1beta1.AttachedByoMachineLabel: defaultNamespace + "." + byoMachine.Name,
+					}).
+					Build()
+				Expect(k8sClientUncached.Create(ctx, labeledHost)).Should(Succeed())
+				DeferCleanup(func() {
+					Expect(k8sClientUncached.Delete(ctx, labeledHost)).Should(Succeed())
+				})
+				WaitForObjectsToBePopulatedInCache(labeledHost)
+
+				attachedHost, err := reconciler.FetchAttachedByoHost(ctx, byoMachine.Name, byoMachine.Namespace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(attachedHost).To(BeNil())
+			})
+		})
+
 		Context("When another ByoMachine claims the ByoHost at the same time", func() {
 			const anotherByoMachineLabel = "default.another-byomachine"
 			// Only the hosts of this test match the selector of the ByoMachine.
