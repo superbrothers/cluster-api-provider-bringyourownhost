@@ -639,7 +639,7 @@ var _ = Describe("Agent", func() {
 					e2e.Showf("error closing file %s: %v", agentLogFile, deferredErr)
 				}
 			}()
-			byohCSRLookupKey := types.NamespacedName{Name: fmt.Sprintf(registration.ByohCSRNameFormat, hostName)}
+			byohCSRLookupKey := types.NamespacedName{Name: infrastructurev1beta1.HostCSRName(ns.Name, hostName)}
 			byohCSR := &certv1.CertificateSigningRequest{}
 
 			Eventually(func() string {
@@ -648,7 +648,7 @@ var _ = Describe("Agent", func() {
 					return err.Error()
 				}
 				return byohCSR.Name
-			}, 10, 1).Should(Equal(fmt.Sprintf(registration.ByohCSRNameFormat, hostName)))
+			}, 10, 1).Should(Equal(infrastructurev1beta1.HostCSRName(ns.Name, hostName)))
 		})
 		It("should persist private key", func() {
 			// start agent
@@ -733,7 +733,7 @@ var _ = Describe("Agent", func() {
 
 			// Approve CSR
 			Eventually(func() (done bool) {
-				byohCSR, kerr := clientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+				byohCSR, kerr := clientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(ns.Name, hostName), metav1.GetOptions{})
 				if kerr != nil {
 					return false
 				}
@@ -743,11 +743,11 @@ var _ = Describe("Agent", func() {
 					Message: "approved",
 					Status:  corev1.ConditionTrue,
 				})
-				_, err = clientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), byohCSR, metav1.UpdateOptions{})
+				_, err = clientSet.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, infrastructurev1beta1.HostCSRName(ns.Name, hostName), byohCSR, metav1.UpdateOptions{})
 				return err == nil
 			}, time.Second*4).Should(BeTrue())
 			// Issue Certificate
-			byohCSR, err := clientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, fmt.Sprintf(registration.ByohCSRNameFormat, hostName), metav1.GetOptions{})
+			byohCSR, err := clientSet.CertificatesV1().CertificateSigningRequests().Get(ctx, infrastructurev1beta1.HostCSRName(ns.Name, hostName), metav1.GetOptions{})
 			Expect(err).ShouldNot(HaveOccurred())
 			var FakeCert = `
 -----BEGIN CERTIFICATE-----
@@ -821,7 +821,7 @@ var _ = Describe("Agent Unit Tests", func() {
 
 			_, err = bootstrapKubeConf.Write(testbootstrapKubeconfigInvalid)
 			Expect(err).NotTo(HaveOccurred())
-			err = handleBootstrapFlow(klog.Background(), "test-host")
+			err = handleBootstrapFlow(klog.Background(), "default", "test-host")
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("client config load failed"))
 		})
@@ -848,7 +848,7 @@ users:
 `)
 			_, err = bootstrapKubeConf.Write(testbootstrapKubeconfigValid)
 			Expect(err).NotTo(HaveOccurred())
-			err = handleBootstrapFlow(klog.Background(), "")
+			err = handleBootstrapFlow(klog.Background(), "default", "")
 			Expect(err).Should(HaveOccurred())
 			Expect(err.Error()).Should(ContainSubstring("kubeconfig generation failed: hostname is not valid"))
 		})
@@ -894,7 +894,7 @@ users:
 			var config *restclient.Config
 			config, err = registration.LoadRESTClientConfig(bootstrapKubeConfig)
 			Expect(err).NotTo(HaveOccurred())
-			err = certRotation(klog.Background(), "test-host", config)
+			err = certRotation(klog.Background(), "default", "test-host", config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 		It("should return if certificate needs rotation", func() {
@@ -925,7 +925,7 @@ users:
 			var config *restclient.Config
 			config, err = registration.LoadRESTClientConfig(bootstrapKubeConfig)
 			Expect(err).NotTo(HaveOccurred())
-			err = certRotation(klog.Background(), "test-host", config)
+			err = certRotation(klog.Background(), "default", "test-host", config)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 	})

@@ -16,11 +16,11 @@ sequenceDiagram
     Admin->>API: Create a BootstrapKubeconfig
     BYOH->>API: Create a bootstrap token, and write a bootstrap kubeconfig to the status
     Admin->>Agent: Copy the bootstrap kubeconfig to the host
-    Agent->>API: Create the CSR byoh-csr-<hostname> with the bootstrap token
+    Agent->>API: Create the CSR byoh-csr-<namespace>.<hostname> with the bootstrap token
     BYOH->>API: Check the CSR, and approve or deny it
     KCM->>API: Sign the approved CSR
     Agent->>Agent: Write ~/.byoh/config with the certificate
-    Agent->>API: Register the ByoHost <hostname> with the certificate
+    Agent->>API: Register the ByoHost <hostname> in <namespace> with the certificate
 ```
 
 ## Registering a host
@@ -75,15 +75,15 @@ sudo systemctl enable --now byoh-hostagent
 The agent uses the bootstrap kubeconfig only when `~/.byoh/config` does not exist; see [Restarting the agent](#restarting-the-agent). It then:
 
 1. generates a private key in the file `byoh-client.key.tmp` in its working directory (mode 0600; `/var/lib/byoh-hostagent` with the package), or reuses the file when it exists;
-2. creates a CertificateSigningRequest (CSR) named `byoh-csr-<hostname>` with the bootstrap token:
+2. creates a CertificateSigningRequest (CSR) named `byoh-csr-<namespace>.<hostname>` with the bootstrap token, where `<namespace>` is the namespace of `--namespace`:
     - signer `kubernetes.io/kube-apiserver-client`;
     - usage `client auth`;
-    - subject `CN=byoh:host:<hostname>`, `O=byoh:hosts`, without subject alternative names;
+    - subject `CN=byoh:host:<namespace>:<hostname>`, `O=byoh:hosts`, without subject alternative names;
     - `expirationSeconds` from `--certExpiryDuration`, in seconds (365 days by default);
 3. waits up to one hour for the certificate, and exits with an error if it is not issued;
 4. writes `~/.byoh/config` (mode 0600) in the home directory of the user that runs it (`/root/.byoh/config` with the package), with the server and the CA of the bootstrap kubeconfig, the certificate and the private key, and removes `byoh-client.key.tmp`.
 
-`<hostname>` is the hostname of the host. It becomes the name of the ByoHost, so it must be a valid name of a Kubernetes object: a lowercase DNS subdomain. It must also be unique in the management cluster: a host with the hostname of another host gets the identity `byoh:host:<hostname>` of that host, and takes over its ByoHost. Some images, such as Ubuntu for Raspberry Pi, name every host `ubuntu`, so set the hostname of each host before you start its agent.
+`<hostname>` is the hostname of the host. It becomes the name of the ByoHost, so it must be a valid name of a Kubernetes object: a lowercase DNS subdomain. It must also be unique in the namespace: a host with the hostname of another host in the same namespace gets the identity `byoh:host:<namespace>:<hostname>` of that host, and takes over its ByoHost. Hosts in different namespaces have different identities, even with the same hostname. Some images, such as Ubuntu for Raspberry Pi, name every host `ubuntu`, so set the hostname of each host before you start its agent.
 
 ### 3. The CSR is approved
 
@@ -94,15 +94,18 @@ The signer `kubernetes.io/kube-apiserver-client` issues a client certificate of 
 - The signer is `kubernetes.io/kube-apiserver-client`.
 - The usages are `client auth`, optionally with `digital signature`, or with `digital signature` and `key encipherment`.
 - The request is signed with its key.
-- The subject has exactly two attributes: the organization `byoh:hosts` and the common name `byoh:host:<name>`, where `<name>` is a lowercase DNS subdomain.
+- The subject has exactly two attributes: the organization `byoh:hosts` and the common name `byoh:host:<namespace>:<name>`, where `<namespace>` is a valid name of a namespace (a DNS label) and `<name>` is a lowercase DNS subdomain.
+- The name of the CSR is `byoh-csr-<namespace>.<name>`, for the namespace and the name in the common name.
 - The request has no subject alternative names.
 - The requester is a bootstrap token of BYOH: its groups include `system:bootstrappers:byoh`, and its username starts with `system:bootstrap:`.
 
 ByoAdmission denies the other CSRs with the reason `ByohCSRInvalid` and a message that tells what failed. It leaves alone the CSRs of the other signers, and the CSRs that are already approved or denied.
 
+ByoAdmission does not check the namespace in the common name against the bootstrap token yet, so any bootstrap token of BYOH can get a certificate for any namespace (see [Current limitations](#current-limitations)).
+
 kube-controller-manager signs an approved CSR. The certificate is valid for `expirationSeconds`, up to the `--cluster-signing-duration` of kube-controller-manager (one year by default).
 
-With the certificate, the API server authenticates the host as the user `byoh:host:<hostname>` in the group `byoh:hosts`.
+With the certificate, the API server authenticates the host as the user `byoh:host:<namespace>:<hostname>` in the group `byoh:hosts`.
 
 #### Approving CSRs manually
 
@@ -117,10 +120,11 @@ Then check each CSR as ByoAdmission does before you approve it:
 ```shell
 kubectl get csr
 # The requester: a bootstrap token of BYOH that you created for this host.
-kubectl get csr byoh-csr-<hostname> -o jsonpath='{.spec.username}{"\n"}{.spec.groups}{"\n"}{.spec.signerName}{"\n"}{.spec.usages}{"\n"}'
-# The subject: only O=byoh:hosts and CN=byoh:host:<hostname>, and no subject alternative names.
-kubectl get csr byoh-csr-<hostname> -o jsonpath='{.spec.request}' | base64 -d | openssl req -noout -text
-kubectl certificate approve byoh-csr-<hostname>
+kubectl get csr byoh-csr-<namespace>.<hostname> -o jsonpath='{.spec.username}{"\n"}{.spec.groups}{"\n"}{.spec.signerName}{"\n"}{.spec.usages}{"\n"}'
+# The subject: only O=byoh:hosts and CN=byoh:host:<namespace>:<hostname>, with the namespace where you register
+# this host, and no subject alternative names.
+kubectl get csr byoh-csr-<namespace>.<hostname> -o jsonpath='{.spec.request}' | base64 -d | openssl req -noout -text
+kubectl certificate approve byoh-csr-<namespace>.<hostname>
 ```
 
 Deny a CSR that you do not expect with `kubectl certificate deny`.
@@ -135,7 +139,9 @@ A ByoMachine selects only the ByoHosts in its own namespace, so register the hos
 
 When `~/.byoh/config` exists, the agent uses it and does not use the bootstrap kubeconfig. It registers the existing ByoHost again.
 
-To register the host again from the start, for example after its certificate has expired, stop the agent, remove `~/.byoh/config`, and start the agent with a new bootstrap kubeconfig. With the package:
+The identity in the certificate includes the namespace of `--namespace`, so the agent cannot register its host in another namespace with the same certificate: the ByoHost webhook rejects the ByoHost. To change `--namespace` of a registered host, register the host again.
+
+To register the host again from the start, for example after its certificate has expired or to change `--namespace`, stop the agent, remove `~/.byoh/config`, and start the agent with a new bootstrap kubeconfig. With the package:
 
 ```shell
 sudo systemctl stop byoh-hostagent
@@ -151,12 +157,12 @@ The provider installs the following RBAC (`config/rbac`; the names get the prefi
 | Identity | User and groups | Permissions |
 |---|---|---|
 | Bootstrap token of a BootstrapKubeconfig | `system:bootstrap:<token ID>` in `system:bootstrappers` and `system:bootstrappers:byoh` | CertificateSigningRequests: create, get, list and watch (`byoh-csr-creator-clusterrole`) |
-| Host | `byoh:host:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list and watch; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
+| Host | `byoh:host:<namespace>:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list and watch; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
 | BYOH controller manager | the ServiceAccount `byoh-controller-manager` in `byoh-system` | `manager-role`, which includes all the verbs on Secrets in all namespaces, the resources of BYOH, and the approval of the CSRs of the signer `kubernetes.io/kube-apiserver-client` |
 
 An agent creates the ByoHost of its host, and then writes only its status (see [Host lifecycle](host_lifecycle.md#who-writes-each-field)). The ByoHost webhook checks the creation, the update and the deletion of ByoHosts, and the update of their status:
 
-- A member of `byoh:hosts` can create, and update the status of, only the ByoHost whose name follows `byoh:host:` in its username.
+- A member of `byoh:hosts` can create, and update the status of, only the ByoHost of the namespace and the name in its username `byoh:host:<namespace>:<name>`. The agent of a host cannot create a ByoHost of its name in another namespace, nor update its status.
 - It can create the ByoHost with labels, but not with the labels of Cluster API and BYOH, annotations, owner references, finalizers or a spec.
 - It cannot update a ByoHost other than its status, and cannot delete ByoHosts. RBAC does not allow them either.
 - The requests of the other users, such as the controller manager and the administrators, are left to RBAC.
@@ -187,7 +193,7 @@ Without the renewal, register the host again before its certificate expires (see
 - Check the CSRs with `kubectl get csr`. The condition of a denied CSR tells why:
 
   ```shell
-  kubectl get csr byoh-csr-<hostname> -o jsonpath='{.status.conditions}'
+  kubectl get csr byoh-csr-<namespace>.<hostname> -o jsonpath='{.status.conditions}'
   ```
 
   The agent creates the CSR of the same name again when it restarts, and fails while the denied CSR exists. Delete the CSR after you fix the cause. kube-controller-manager also deletes a denied CSR one hour later.
@@ -197,7 +203,6 @@ Without the renewal, register the host again before its certificate expires (see
 The following are known, and are planned to be changed:
 
 - A host can get all the Secrets in all namespaces, and list all the ByoHosts. A compromised host can read the bootstrap data of the other hosts, which their ByoHosts refer to in `spec.bootstrapSecret`. In a self-hosted management cluster, it can also read `<cluster>-kubeconfig`, which is the administrator kubeconfig of the management cluster itself. Planned: let a host read only the Secrets of its own ByoHost.
-- The identity of a host does not include a namespace. The agent of a host can create the ByoHost of its name in any namespace, with labels of its choice, and update its status. Hosts of the same name in different namespaces share an identity, and each can update the status of the ByoHost of the other, for example report that the other host has been reset. Give every host a name that is unique across the namespaces. Planned: include the namespace in the identity of a host.
-- A bootstrap token of BYOH can get a certificate of any host name, including the names of registered hosts. Planned: bind each bootstrap token to a host name for one use, and deny the CSRs for the names of registered hosts.
-- The name of the CSR is fixed for each hostname. Someone who can create CSRs can create `byoh-csr-<hostname>` first, and the host cannot get its certificate until that CSR is removed.
+- A bootstrap token of BYOH can get a certificate of any host name in any namespace, including the names of registered hosts. Planned: bind each bootstrap token to a namespace and a host name for one use, and deny the CSRs for the names of registered hosts.
+- The name of the CSR is fixed for each host. Someone who can create CSRs can create `byoh-csr-<namespace>.<hostname>` first, and the host cannot get its certificate until that CSR is removed.
 - The renewal of a certificate needs a new bootstrap kubeconfig and a restart of the agent. Planned: renew with the certificate of the host.

@@ -32,10 +32,9 @@ const (
 	// ExpirationSeconds defines the expiry time for Certificates
 	// which is currently set to 1 year aligned with kubeadm defaults.
 	ExpirationSeconds = 86400 * 365
-	// ByoAdmission approves only the CSRs of this organization and common name.
+	// ByoAdmission approves only the CSRs of this organization, with the
+	// common name infrastructurev1beta1.HostUsername.
 	ByohCSROrg        = infrastructurev1beta1.HostsGroup
-	ByohCSRCNFormat   = infrastructurev1beta1.HostUsernamePrefix + "%s"
-	ByohCSRNameFormat = "byoh-csr-%s"
 	TmpPrivateKey     = "byoh-client.key.tmp"
 	DefaultConfigPath = ".byoh/config"
 )
@@ -73,9 +72,10 @@ func NewByohCSR(bootstrapClientConfig *restclient.Config, logger logr.Logger, ex
 
 // BootstrapKubeconfig will create a CertificateSigningRequest for the host
 // its running on and once the CSR is approved it will fetch the Certificate
-// and create a kubeconfig which will be used then by the host reconciler
-func (bcsr *ByohCSR) BootstrapKubeconfig(hostName string) error {
-	reqName, reqUID, err := bcsr.RequestBYOHClientCert(hostName)
+// and create a kubeconfig which will be used then by the host reconciler. The
+// namespace and the host name are those of the ByoHost of the host.
+func (bcsr *ByohCSR) BootstrapKubeconfig(namespace, hostName string) error {
+	reqName, reqUID, err := bcsr.RequestBYOHClientCert(namespace, hostName)
 	if err != nil {
 		return err
 	}
@@ -100,8 +100,12 @@ func (bcsr *ByohCSR) BootstrapKubeconfig(hostName string) error {
 }
 
 // RequestBYOHClientCert will generate Private Key and then will create a
-// CertificateSigningRequest in K8s
-func (bcsr *ByohCSR) RequestBYOHClientCert(hostname string) (string, types.UID, error) {
+// CertificateSigningRequest in K8s for the ByoHost of the namespace and the
+// host name
+func (bcsr *ByohCSR) RequestBYOHClientCert(namespace, hostname string) (string, types.UID, error) {
+	if namespace == "" {
+		return "", "", fmt.Errorf("namespace is not valid")
+	}
 	if hostname == "" {
 		return "", "", fmt.Errorf("hostname is not valid")
 	}
@@ -114,7 +118,7 @@ func (bcsr *ByohCSR) RequestBYOHClientCert(hostname string) (string, types.UID, 
 		return "", "", fmt.Errorf("invalid private key for certificate request: %v", err)
 	}
 	bcsr.PrivateKey = keyData
-	csrData, err := generateCSR(hostname, privateKey)
+	csrData, err := generateCSR(namespace, hostname, privateKey)
 	if err != nil {
 		return "", "", fmt.Errorf("error generating csr %s, err=%v", hostname, err)
 	}
@@ -122,7 +126,7 @@ func (bcsr *ByohCSR) RequestBYOHClientCert(hostname string) (string, types.UID, 
 	bcsr.logger.Info("certTimeToExpire", "duration", certTimeToExpire)
 	reqName, reqUID, err := csr.RequestCertificateWithContext(context.Background(), bcsr.bootstrapClient,
 		csrData,
-		fmt.Sprintf(ByohCSRNameFormat, hostname),
+		infrastructurev1beta1.HostCSRName(namespace, hostname),
 		certv1.KubeAPIServerClientSignerName,
 		&certTimeToExpire,
 		[]certv1.KeyUsage{certv1.UsageClientAuth},
@@ -134,11 +138,11 @@ func (bcsr *ByohCSR) RequestBYOHClientCert(hostname string) (string, types.UID, 
 	return reqName, reqUID, nil
 }
 
-func generateCSR(hostname string, privKey interface{}) ([]byte, error) {
+func generateCSR(namespace, hostname string, privKey interface{}) ([]byte, error) {
 	// Generate a new *x509.CertificateRequest template
 	csrTemplate := x509.CertificateRequest{
 		Subject: pkix.Name{
-			CommonName:   fmt.Sprintf(ByohCSRCNFormat, hostname),
+			CommonName:   infrastructurev1beta1.HostUsername(namespace, hostname),
 			Organization: []string{ByohCSROrg},
 		},
 	}

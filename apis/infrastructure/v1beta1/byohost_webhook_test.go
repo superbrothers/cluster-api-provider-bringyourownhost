@@ -76,10 +76,20 @@ func grantToHost3(verbs ...string) {
 	binding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-byohost-host3-"},
 		RoleRef:    rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: role.Name},
-		Subjects:   []rbacv1.Subject{{APIGroup: "rbac.authorization.k8s.io", Kind: "User", Name: "byoh:host:host3"}},
+		Subjects:   []rbacv1.Subject{{APIGroup: "rbac.authorization.k8s.io", Kind: "User", Name: "byoh:host:default:host3"}},
 	}
 	Expect(k8sClient.Create(ctx, binding)).To(Succeed())
 	DeferCleanup(func() { Expect(k8sClient.Delete(ctx, binding)).To(Succeed()) })
+}
+
+// createNamespace creates the namespace of the name, if it does not exist, and
+// returns its name.
+func createNamespace(name string) string {
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	if err := k8sClient.Create(ctx, namespace); err != nil {
+		Expect(apierrors.IsAlreadyExists(err)).To(BeTrue(), "%v", err)
+	}
+	return name
 }
 
 // denied returns the error message of the webhook that denies a request.
@@ -105,7 +115,7 @@ var _ = Describe("ByohostWebhook", func() {
 		It("should not let the agent of the host delete it with RBAC", func() {
 			err := ValidUserK8sClient.Delete(ctx, byoHost)
 			Expect(apierrors.IsForbidden(err)).To(BeTrue(), "%v", err)
-			Expect(err.Error()).To(ContainSubstring(`User "byoh:host:host1" cannot delete resource "byohosts"`))
+			Expect(err.Error()).To(ContainSubstring(`User "byoh:host:default:host1" cannot delete resource "byohosts"`))
 		})
 
 		It("should reject the request from an agent in the webhook even when RBAC allows it", func() {
@@ -120,7 +130,7 @@ var _ = Describe("ByohostWebhook", func() {
 					return ""
 				}
 				return err.Error()
-			}).Should(Equal(denied("byoh:host:host3 cannot delete ByoHost host3: a member of byoh:hosts cannot delete ByoHosts")))
+			}).Should(Equal(denied("byoh:host:default:host3 cannot delete ByoHost default/host3: a member of byoh:hosts cannot delete ByoHosts")))
 		})
 
 		It("should allow the request from an administrator", func() {
@@ -151,46 +161,39 @@ var _ = Describe("ByohostWebhook", func() {
 		It("should reject the request from an invalid user", func() {
 			err := InvalidUserK8sClient.Create(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("test-user cannot create ByoHost host1"))
+			Expect(err.Error()).To(ContainSubstring("test-user cannot create ByoHost default/host1"))
 		})
 
 		It("should reject the request from the agent of another host whose name is contained", func() {
 			byoHost.Name = "host10"
 			err := ValidUserK8sClient.Create(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("byoh:host:host1 cannot create ByoHost host10"))
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot create ByoHost default/host10"))
 		})
 
 		It("should reject a ByoHost with a label of Cluster API", func() {
 			byoHost.Labels = map[string]string{"cluster.x-k8s.io/cluster-name": "cluster1"}
 			err := ValidUserK8sClient.Create(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("byoh:host:host1 cannot create ByoHost host1: metadata.labels[cluster.x-k8s.io/cluster-name]"))
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot create ByoHost default/host1: metadata.labels[cluster.x-k8s.io/cluster-name]"))
 		})
 
 		It("should reject a ByoHost that is attached to a ByoMachine", func() {
 			byoHost.Spec.ByoMachineRef = &byohv1beta1.ByoMachineReference{Name: "byomachine1", UID: "uid-of-byomachine1"}
 			err := ValidUserK8sClient.Create(ctx, byoHost)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("byoh:host:host1 cannot create ByoHost host1: spec: Forbidden: only the controller sets the spec"))
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot create ByoHost default/host1: spec: Forbidden: only the controller sets the spec"))
 		})
 
-		// This pins a known limitation: the identity of a host does not
-		// include a namespace (docs/host_registration.md, "Current
-		// limitations"), so the agent of a host can create a ByoHost of its
-		// name in any namespace, with labels of its choice. When the identity
-		// includes the namespace, this request must be rejected.
-		It("should allow the agent to create a ByoHost of its name in another namespace", func() {
-			namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "byohost-webhook-other"}}
-			if err := k8sClient.Create(ctx, namespace); err != nil {
-				Expect(apierrors.IsAlreadyExists(err)).To(BeTrue(), "%v", err)
-			}
-			Expect(ValidUserK8sClient.Create(ctx, newByoHost("host1"))).To(Succeed())
-			DeferCleanup(deleteByoHost, newByoHost("host1"))
-
-			byoHost.Namespace = namespace.Name
+		// The identity of a host includes the namespace of its ByoHost, so
+		// that the agent of a host cannot register the host again in another
+		// namespace with other labels.
+		It("should reject the agent creating a ByoHost of its name in another namespace", func() {
+			byoHost.Namespace = createNamespace("byohost-webhook-other")
 			byoHost.Labels = map[string]string{"role": "control-plane"}
-			Expect(ValidUserK8sClient.Create(ctx, byoHost)).To(Succeed())
+			err := ValidUserK8sClient.Create(ctx, byoHost)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot create ByoHost byohost-webhook-other/host1"))
 		})
 
 		It("should allow the request from an administrator", func() {
@@ -225,7 +228,7 @@ var _ = Describe("ByohostWebhook", func() {
 			byoHost.Labels["role"] = "control-plane"
 			err := ValidUserK8sClient.Update(ctx, byoHost)
 			Expect(apierrors.IsForbidden(err)).To(BeTrue(), "%v", err)
-			Expect(err.Error()).To(ContainSubstring(`User "byoh:host:host1" cannot update resource "byohosts"`))
+			Expect(err.Error()).To(ContainSubstring(`User "byoh:host:default:host1" cannot update resource "byohosts"`))
 			err = InvalidUserK8sClient.Update(ctx, byoHost)
 			Expect(apierrors.IsForbidden(err)).To(BeTrue(), "%v", err)
 		})
@@ -243,7 +246,7 @@ var _ = Describe("ByohostWebhook", func() {
 					return ""
 				}
 				return err.Error()
-			}).Should(Equal(denied("byoh:host:host3 cannot update ByoHost host3: a member of byoh:hosts can update only the status of a ByoHost")))
+			}).Should(Equal(denied("byoh:host:default:host3 cannot update ByoHost default/host3: a member of byoh:hosts can update only the status of a ByoHost")))
 		})
 
 		It("should reject the agent updating the status of another host", func() {
@@ -254,7 +257,19 @@ var _ = Describe("ByohostWebhook", func() {
 			host2.Status.LastReset = &byohv1beta1.LastReset{ByoMachineUID: "uid-of-byomachine1", Time: metav1.Now()}
 			err := ValidUserK8sClient.Status().Update(ctx, host2)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("byoh:host:host1 cannot update the status of ByoHost host2"))
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot update the status of ByoHost default/host2"))
+		})
+
+		It("should reject the agent updating the status of the ByoHost of its name in another namespace", func() {
+			sameName := newByoHost("host1")
+			sameName.Namespace = createNamespace("byohost-webhook-other")
+			Expect(k8sClient.Create(ctx, sameName)).To(Succeed())
+			DeferCleanup(deleteByoHost, sameName)
+
+			sameName.Status.LastReset = &byohv1beta1.LastReset{ByoMachineUID: "uid-of-byomachine1", Time: metav1.Now()}
+			err := ValidUserK8sClient.Status().Update(ctx, sameName)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("byoh:host:default:host1 cannot update the status of ByoHost byohost-webhook-other/host1"))
 		})
 
 		It("should allow the request from an administrator", func() {

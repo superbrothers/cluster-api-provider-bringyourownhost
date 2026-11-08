@@ -27,13 +27,14 @@ import (
 
 var _ = Describe("Controllers/ByoadmissionController", func() {
 	const (
-		hostName = "my-host"
-		csrName  = "byoh-csr-" + hostName
+		hostNamespace = "my-namespace"
+		hostName      = "my-host"
+		csrName       = "byoh-csr-" + hostNamespace + "." + hostName
 		// bootstrapUser is the user of a bootstrap token of BYOH.
 		bootstrapUser = "system:bootstrap:abcdef"
 	)
 	var (
-		hostUser        = infrastructurev1beta1.HostUsernamePrefix + hostName
+		hostUser        = "byoh:host:" + hostNamespace + ":" + hostName
 		bootstrapGroups = []string{"system:bootstrappers", infrastructurev1beta1.BootstrapTokenExtraGroups, "system:authenticated"}
 		hostGroups      = []string{infrastructurev1beta1.HostsGroup, "system:authenticated"}
 	)
@@ -112,14 +113,38 @@ var _ = Describe("Controllers/ByoadmissionController", func() {
 			return builder.CertificateSigningRequest(csrName, "kubernetes-admin", infrastructurev1beta1.HostsGroup, 2048).
 				WithRequester(bootstrapUser, bootstrapGroups...)
 		}, "the common name must be"),
+		Entry("with a common name without a namespace", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest(csrName, "byoh:host:"+hostName, infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, "the common name must be byoh:host:<namespace>:<host name>"),
+		Entry("with an invalid namespace", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest("byoh-csr-my.namespace."+hostName, "byoh:host:my.namespace:"+hostName, infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, `the namespace "my.namespace" in the common name is invalid`),
+		Entry("with an empty namespace", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest("byoh-csr-."+hostName, "byoh:host::"+hostName, infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, "the namespace \"\" in the common name is invalid"),
 		Entry("with an invalid host name", func() *builder.CertificateSigningRequestBuilder {
-			return builder.CertificateSigningRequest(csrName, infrastructurev1beta1.HostUsernamePrefix+"My_Host", infrastructurev1beta1.HostsGroup, 2048).
+			return builder.CertificateSigningRequest(csrName, "byoh:host:"+hostNamespace+":My_Host", infrastructurev1beta1.HostsGroup, 2048).
 				WithRequester(bootstrapUser, bootstrapGroups...)
-		}, "in the common name is invalid"),
+		}, `the host name "My_Host" in the common name is invalid`),
+		Entry("with a host name with a colon", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest(csrName, "byoh:host:"+hostNamespace+":my:host", infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, `the host name "my:host" in the common name is invalid`),
 		Entry("with an empty host name", func() *builder.CertificateSigningRequestBuilder {
-			return builder.CertificateSigningRequest(csrName, infrastructurev1beta1.HostUsernamePrefix, infrastructurev1beta1.HostsGroup, 2048).
+			return builder.CertificateSigningRequest(csrName, "byoh:host:"+hostNamespace+":", infrastructurev1beta1.HostsGroup, 2048).
 				WithRequester(bootstrapUser, bootstrapGroups...)
 		}, "in the common name is invalid"),
+		Entry("with a name of another host", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest("byoh-csr-"+hostNamespace+".another-host", hostUser, infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, `the name of the CSR must be "`+csrName+`" for the common name`),
+		Entry("with a name of the host in another namespace", func() *builder.CertificateSigningRequestBuilder {
+			return builder.CertificateSigningRequest("byoh-csr-another-namespace."+hostName, hostUser, infrastructurev1beta1.HostsGroup, 2048).
+				WithRequester(bootstrapUser, bootstrapGroups...)
+		}, `the name of the CSR must be "`+csrName+`" for the common name`),
 		Entry("with an organizational unit", func() *builder.CertificateSigningRequestBuilder {
 			return hostCSR().WithExtraNames(pkix.AttributeTypeAndValue{Type: asn1.ObjectIdentifier{2, 5, 4, 11}, Value: "system:masters"})
 		}, "the subject must have only one organization and one common name"),
@@ -154,7 +179,7 @@ var _ = Describe("Controllers/ByoadmissionController", func() {
 			return hostCSR().WithRequester(hostUser, hostGroups...)
 		}, "the requester"),
 		Entry("from another host", func() *builder.CertificateSigningRequestBuilder {
-			return hostCSR().WithRequester(infrastructurev1beta1.HostUsernamePrefix+"another-host", hostGroups...)
+			return hostCSR().WithRequester("byoh:host:"+hostNamespace+":another-host", hostGroups...)
 		}, "the requester"),
 		Entry("from another user", func() *builder.CertificateSigningRequestBuilder {
 			return hostCSR().WithRequester("kubernetes-admin", "kubeadm:cluster-admins", "system:authenticated")

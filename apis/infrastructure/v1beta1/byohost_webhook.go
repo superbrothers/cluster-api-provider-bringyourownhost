@@ -37,14 +37,37 @@ const (
 	// (agent/registration/csr.go).
 	HostsGroup = "byoh:hosts"
 	// HostUsernamePrefix is the prefix of the username of an agent, which is
-	// followed by the name of its host, and so of its ByoHost.
+	// followed by the namespace and the name of its ByoHost (see
+	// HostUsername).
 	HostUsernamePrefix = "byoh:host:"
+	// HostCSRNamePrefix is the prefix of the names of the CSRs of the agents
+	// (see HostCSRName).
+	HostCSRNamePrefix = "byoh-csr-"
 	// statusSubResource is the subresource of the status of a ByoHost.
 	statusSubResource = "status"
 	// updateStatusVerb is the verb of an update of the status in the
 	// messages.
 	updateStatusVerb = "update the status of"
 )
+
+// HostUsername returns the username of the agent of a host, which is the
+// common name of its certificate: HostUsernamePrefix, followed by the namespace
+// and the name of the ByoHost of the host, separated by a colon. Neither a
+// namespace nor the name of a ByoHost has a colon. The namespace is a part of
+// the identity, as hosts of the same name in different namespaces have
+// different ByoHosts.
+func HostUsername(namespace, name string) string {
+	return HostUsernamePrefix + namespace + ":" + name
+}
+
+// HostCSRName returns the name of the CSR of the agent of a host:
+// HostCSRNamePrefix, followed by the namespace and the name of the ByoHost of
+// the host, separated by a dot. A namespace has no dots, so the name tells them
+// apart, and the hosts of the same name in different namespaces do not share
+// a CSR.
+func HostCSRName(namespace, name string) string {
+	return HostCSRNamePrefix + namespace + "." + name
+}
 
 // Handle handles all the requests for ByoHost resource.
 //
@@ -82,10 +105,10 @@ func isHost(req *admission.Request) bool {
 // not the agent of the host of the ByoHost, or nil.
 func checkHostName(req *admission.Request, byoHost *ByoHost) *admission.Response {
 	userName := req.UserInfo.Username
-	if userName == HostUsernamePrefix+byoHost.Name {
+	if userName == HostUsername(byoHost.Namespace, byoHost.Name) {
 		return nil
 	}
-	response := admission.Denied(fmt.Sprintf("%s cannot %s ByoHost %s: a member of %s can create, and update the status of, only the ByoHost named after its username %s<name>", userName, verb(req), byoHost.Name, HostsGroup, HostUsernamePrefix))
+	response := admission.Denied(fmt.Sprintf("%s cannot %s ByoHost %s/%s: a member of %s can create, and update the status of, only the ByoHost of the namespace and the name in its username %s<namespace>:<name>", userName, verb(req), byoHost.Namespace, byoHost.Name, HostsGroup, HostUsernamePrefix))
 	return &response
 }
 
@@ -110,7 +133,7 @@ func (v *ByoHostValidator) handleCreate(req *admission.Request) admission.Respon
 		return *response
 	}
 	if errs := validateHostCreate(byoHost); len(errs) > 0 {
-		return admission.Denied(fmt.Sprintf("%s cannot create ByoHost %s: %s", req.UserInfo.Username, byoHost.Name, errs.ToAggregate().Error()))
+		return admission.Denied(fmt.Sprintf("%s cannot create ByoHost %s/%s: %s", req.UserInfo.Username, byoHost.Namespace, byoHost.Name, errs.ToAggregate().Error()))
 	}
 	return admission.Allowed("")
 }
@@ -124,7 +147,7 @@ func (v *ByoHostValidator) handleUpdate(req *admission.Request) admission.Respon
 		return admission.Allowed("")
 	}
 	if req.SubResource != statusSubResource {
-		return admission.Denied(fmt.Sprintf("%s cannot update ByoHost %s: a member of %s can update only the status of a ByoHost", req.UserInfo.Username, byoHost.Name, HostsGroup))
+		return admission.Denied(fmt.Sprintf("%s cannot update ByoHost %s/%s: a member of %s can update only the status of a ByoHost", req.UserInfo.Username, byoHost.Namespace, byoHost.Name, HostsGroup))
 	}
 	if response := checkHostName(req, byoHost); response != nil {
 		return *response
@@ -140,7 +163,7 @@ func (v *ByoHostValidator) handleDelete(req *admission.Request) admission.Respon
 	}
 	// The agents never delete ByoHosts.
 	if isHost(req) {
-		return admission.Denied(fmt.Sprintf("%s cannot delete ByoHost %s: a member of %s cannot delete ByoHosts", req.UserInfo.Username, byoHost.Name, HostsGroup))
+		return admission.Denied(fmt.Sprintf("%s cannot delete ByoHost %s/%s: a member of %s cannot delete ByoHosts", req.UserInfo.Username, byoHost.Namespace, byoHost.Name, HostsGroup))
 	}
 	// A ByoHost in use is never deleted: its host has not been reset, and the
 	// agent would register the host again as a free ByoHost when it restarts.
