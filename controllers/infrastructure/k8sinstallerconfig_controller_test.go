@@ -190,9 +190,9 @@ var _ = Describe("Controllers/K8sInstallerConfigController", func() {
 			ph, err := v1beta1patch.NewHelper(byoMachine, k8sClientUncached)
 			Expect(err).ShouldNot(HaveOccurred())
 			byoMachine.Status.HostInfo = infrav1.HostInfo{
-				Architecture: "amd64",
-				OSName:       "linux",
-				OSImage:      "Ubuntu 26.04.1 LTS",
+				Architecture:    "amd64",
+				OperatingSystem: "linux",
+				OSImage:         "Ubuntu 26.04.1 LTS",
 			}
 			v1beta1conditions.Set(byoMachine, &clusterv1beta1.Condition{
 				Type:   infrav1.BYOHostReady,

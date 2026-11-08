@@ -191,17 +191,21 @@ spec:
                       - type
                     type: object
                   type: array
-                hostinfo:
-                  description: HostInfo has the attached host platform details.
+                hostInfo:
+                  description: |-
+                    HostInfo is the platform of the host that the ByoMachine is attached
+                    to, which the installer is chosen for.
                   properties:
                     architecture:
-                      description: The Architecture reported by the host.
+                      description: Architecture is the architecture of the host, such as amd64.
                       type: string
-                    osimage:
-                      description: OS Image reported by the host.
+                    operatingSystem:
+                      description: OperatingSystem is the operating system of the host, such as linux.
                       type: string
-                    osname:
-                      description: The Operating System reported by the host.
+                    osImage:
+                      description: |-
+                        OSImage is the distribution of the host, from PRETTY_NAME of
+                        /etc/os-release, such as Ubuntu 26.04 LTS.
                       type: string
                   type: object
                 ready:

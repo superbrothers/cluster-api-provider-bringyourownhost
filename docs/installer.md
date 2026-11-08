@@ -64,7 +64,7 @@ If someone wants to implement their own installer controller then they need to f
 - If `status.ready` is true, exit the reconciliation
 - Deterministically generate the name for the installation secret. It must differ from the name of the Machine, which the bootstrap data secret of the Machine has. The default installer uses `<name of the K8sInstallerConfig>-installation`.
 - Try to retrieve the Secret with the name from the previous step
-  - If it does not exist, generate installation/uninstallation data using `ByoMachine.status.hostinfo` details and create the Secret with the following data:
+  - If it does not exist, generate installation/uninstallation data using `ByoMachine.status.hostInfo` details and create the Secret with the following data:
     - _`install`_ (string): contains installation bash script
     - _`uninstall`_ (string): contains uninstallation bash script
   - The `byoh agent` runs the scripts with bash as they are.

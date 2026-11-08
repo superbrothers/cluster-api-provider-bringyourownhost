@@ -350,7 +350,7 @@ func (r *ByoMachineReconciler) reconcileNormal(ctx context.Context, machineScope
 	}
 
 	if machineScope.ByoMachine.Status.HostInfo == (infrav1.HostInfo{}) {
-		machineScope.ByoMachine.Status.HostInfo = machineScope.ByoHost.Status.HostDetails
+		machineScope.ByoMachine.Status.HostInfo = machineScope.ByoHost.Status.HostInfo
 	}
 
 	if machineScope.ByoMachine.Spec.InstallerRef != nil && machineScope.ByoHost.Spec.InstallationSecret == nil {

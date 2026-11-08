@@ -352,18 +352,18 @@ var _ = Describe("Controllers/ByomachineController", func() {
 				It("should set host platform info from byohost to byomachine", func() {
 					ph, err := v1beta1patch.NewHelper(byoHost, k8sClientUncached)
 					Expect(err).ShouldNot(HaveOccurred())
-					byoHost.Status.HostDetails = infrastructurev1beta1.HostInfo{
-						OSName:       "linux",
-						OSImage:      "Ubuntu 20.04.4 LTS",
-						Architecture: "arm64",
+					byoHost.Status.HostInfo = infrastructurev1beta1.HostInfo{
+						OperatingSystem: "linux",
+						OSImage:         "Ubuntu 20.04.4 LTS",
+						Architecture:    "arm64",
 					}
 					Expect(ph.Patch(ctx, byoHost, v1beta1patch.WithStatusObservedGeneration{})).Should(Succeed())
 
 					WaitForObjectToBeUpdatedInCache(byoHost, func(object client.Object) bool {
-						return object.(*infrastructurev1beta1.ByoHost).Status.HostDetails == infrastructurev1beta1.HostInfo{
-							OSName:       "linux",
-							OSImage:      "Ubuntu 20.04.4 LTS",
-							Architecture: "arm64",
+						return object.(*infrastructurev1beta1.ByoHost).Status.HostInfo == infrastructurev1beta1.HostInfo{
+							OperatingSystem: "linux",
+							OSImage:         "Ubuntu 20.04.4 LTS",
+							Architecture:    "arm64",
 						}
 					})
 
@@ -372,7 +372,7 @@ var _ = Describe("Controllers/ByomachineController", func() {
 					patchedByoMachine := &infrastructurev1beta1.ByoMachine{}
 					err = k8sClientUncached.Get(ctx, byoMachineLookupKey, patchedByoMachine)
 					Expect(err).ToNot(HaveOccurred())
-					Expect(patchedByoMachine.Status.HostInfo).To(Equal(byoHost.Status.HostDetails))
+					Expect(patchedByoMachine.Status.HostInfo).To(Equal(byoHost.Status.HostInfo))
 
 				})
 
