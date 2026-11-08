@@ -38,6 +38,12 @@ const (
 	CNIPath                     = "CNI"
 	CNIResources                = "CNI_RESOURCES"
 	IPFamily                    = "IP_FAMILY"
+
+	// KubernetesVersionUpgradeFrom and KubernetesVersionUpgradeTo are the
+	// versions of the workload clusters that the upgrade specs upgrade from
+	// and to.
+	KubernetesVersionUpgradeFrom = "KUBERNETES_VERSION_UPGRADE_FROM"
+	KubernetesVersionUpgradeTo   = "KUBERNETES_VERSION_UPGRADE_TO"
 )
 
 // Test suite flags

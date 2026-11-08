@@ -84,6 +84,10 @@ variables:
   # The version of the kind management cluster, which must be in the kind
   # mapper of the Cluster API test framework.
   KUBERNETES_VERSION_MANAGEMENT: "v1.36.4"
+  # The versions of the workload clusters that the upgrade specs upgrade from
+  # and to. Cluster API v1.14 supports workload clusters up to v1.37.
+  KUBERNETES_VERSION_UPGRADE_FROM: "v1.36.6"
+  KUBERNETES_VERSION_UPGRADE_TO: "v1.37.2"
   DOCKER_SERVICE_DOMAIN: "cluster.local"
   IP_FAMILY: "IPv4"
   DOCKER_SERVICE_CIDRS: "10.128.0.0/12"

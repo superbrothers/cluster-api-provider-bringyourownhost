@@ -343,23 +343,3 @@ func (r *ByoHostRunner) ExecByoDockerHost(byohost *container.CreateResponse) (ty
 	output, err := r.DockerClient.ContainerExecAttach(r.Context, resp.ID, container.ExecStartOptions{})
 	return output, byohost.ID, err
 }
-
-func setControlPlaneIP(ctx context.Context, dockerClient *client.Client) {
-	_, ok := os.LookupEnv("CONTROL_PLANE_ENDPOINT_IP")
-	if ok {
-		return
-	}
-	inspect, _ := dockerClient.NetworkInspect(ctx, "kind", network.InspectOptions{})
-	ipOctets := strings.Split(inspect.IPAM.Config[0].Subnet, ".")
-
-	// The ControlPlaneEndpoint is a static IP that is in the hosts'
-	// subnet but outside of its DHCP range. We believe 151 is a pretty
-	// high number and we have < 10 containers being spun up, so we
-	// can safely use this IP for the ControlPlaneEndpoint
-	ipOctets[3] = "151"
-	ip := strings.Join(ipOctets, ".")
-	err := os.Setenv("CONTROL_PLANE_ENDPOINT_IP", ip)
-	if err != nil {
-		Expect(err).NotTo(HaveOccurred())
-	}
-}
