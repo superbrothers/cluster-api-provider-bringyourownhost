@@ -25,7 +25,7 @@ The reset runs `kubeadm reset` when kubeadm is on the host: when the agent has i
 
 ## Who writes each field
 
-The controller writes the spec of a ByoHost, and the agent writes the status. BYOH does not write the labels and the annotations of a ByoHost; they are for the administrators.
+The controller writes the spec of a ByoHost, and the agent writes the status. BYOH does not write the labels and the annotations of a ByoHost; they are for the administrators. RBAC and the ByoHost webhook let an agent only create the ByoHost of its host and update its status (see [What each identity can do](host_registration.md#what-each-identity-can-do)).
 
 | Field | Written by | Content |
 |---|---|---|

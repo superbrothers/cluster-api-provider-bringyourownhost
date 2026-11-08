@@ -127,7 +127,7 @@ Deny a CSR that you do not expect with `kubectl certificate deny`.
 
 ### 4. The agent registers the ByoHost
 
-With the certificate, the agent gets or creates the ByoHost named `<hostname>` in the namespace of `--namespace` (`default` by default), with the labels of `--label`, and reports the network interfaces and the OS of the host in its status. The labels are set only when the ByoHost is created.
+With the certificate, the agent gets or creates the ByoHost named `<hostname>` in the namespace of `--namespace` (`default` by default), with the labels of `--label`, and reports the network interfaces and the OS of the host in its status. The labels are set only when the ByoHost is created, and the agent cannot change its ByoHost but its status afterwards. To change the labels of a registered host, an administrator edits its ByoHost. The labels of Cluster API and BYOH (with the prefix `cluster.x-k8s.io/` or a subdomain of it, such as `byoh.infrastructure.cluster.x-k8s.io/`) cannot be given with `--label`.
 
 A ByoMachine selects only the ByoHosts in its own namespace, so register the host in the namespace of the cluster that uses it. `clusterctl move` also moves only the objects in the namespace of the cluster.
 
@@ -151,16 +151,16 @@ The provider installs the following RBAC (`config/rbac`; the names get the prefi
 | Identity | User and groups | Permissions |
 |---|---|---|
 | Bootstrap token of a BootstrapKubeconfig | `system:bootstrap:<token ID>` in `system:bootstrappers` and `system:bootstrappers:byoh` | CertificateSigningRequests: create, get, list and watch (`byoh-csr-creator-clusterrole`) |
-| Host | `byoh:host:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list, watch and delete; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
+| Host | `byoh:host:<hostname>` in `byoh:hosts` | ByoHosts in all namespaces: create, get, list and watch; `byohosts/status`: get, update and patch; events (`events.k8s.io`): create and patch (`byohost-editor-role`). Secrets in all namespaces: get (`secret-reader-clusterrole`) |
 | BYOH controller manager | the ServiceAccount `byoh-controller-manager` in `byoh-system` | `manager-role`, which includes all the verbs on Secrets in all namespaces, the resources of BYOH, and the approval of the CSRs of the signer `kubernetes.io/kube-apiserver-client` |
 
-The ByoHost webhook also checks the creation, the update and the deletion of ByoHosts:
+An agent creates the ByoHost of its host, and then writes only its status (see [Host lifecycle](host_lifecycle.md#who-writes-each-field)). The ByoHost webhook checks the creation, the update and the deletion of ByoHosts, and the update of their status:
 
-- A member of `byoh:hosts` can create and update only the ByoHost whose name follows `byoh:host:` in its username.
+- A member of `byoh:hosts` can create, and update the status of, only the ByoHost whose name follows `byoh:host:` in its username.
+- It can create the ByoHost with labels, but not with the labels of Cluster API and BYOH, annotations, owner references, finalizers or a spec.
+- It cannot update a ByoHost other than its status, and cannot delete ByoHosts. RBAC does not allow them either.
 - The requests of the other users, such as the controller manager and the administrators, are left to RBAC.
 - Nobody can delete a ByoHost while it is attached to a ByoMachine (`spec.byoMachineRef`). See [When a host is not reset](host_lifecycle.md#when-a-host-is-not-reset) for a host that is not reset.
-
-The webhook does not check the status of ByoHosts.
 
 ## Certificate lifetime and renewal
 
@@ -197,7 +197,7 @@ Without the renewal, register the host again before its certificate expires (see
 The following are known, and are planned to be changed:
 
 - A host can get all the Secrets in all namespaces, and list all the ByoHosts. A compromised host can read the bootstrap data of the other hosts, which their ByoHosts refer to in `spec.bootstrapSecret`. In a self-hosted management cluster, it can also read `<cluster>-kubeconfig`, which is the administrator kubeconfig of the management cluster itself. Planned: let a host read only the Secrets of its own ByoHost.
-- A host can update the status of any ByoHost, for example report that another host has been reset, and delete any ByoHost that is not attached to a ByoMachine.
+- The identity of a host does not include a namespace. The agent of a host can create the ByoHost of its name in any namespace, with labels of its choice, and update its status. Hosts of the same name in different namespaces share an identity, and each can update the status of the ByoHost of the other, for example report that the other host has been reset. Give every host a name that is unique across the namespaces. Planned: include the namespace in the identity of a host.
 - A bootstrap token of BYOH can get a certificate of any host name, including the names of registered hosts. Planned: bind each bootstrap token to a host name for one use, and deny the CSRs for the names of registered hosts.
 - The name of the CSR is fixed for each hostname. Someone who can create CSRs can create `byoh-csr-<hostname>` first, and the host cannot get its certificate until that CSR is removed.
 - The renewal of a certificate needs a new bootstrap kubeconfig and a restart of the agent. Planned: renew with the certificate of the host.

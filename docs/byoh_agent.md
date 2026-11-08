@@ -28,7 +28,7 @@ Duration in seconds of the certificate that the agent requests for the host (def
 ```
 --label labelFlags       
 ```
-Labels to attach to the ByoHost CR in the form `labelname=labelVal` Eg: `--label site=apac --label cores=2`. The agent sets them only when it creates the ByoHost.
+Labels to attach to the ByoHost CR in the form `labelname=labelVal` Eg: `--label site=apac --label cores=2`. The agent sets them only when it creates the ByoHost. The labels of Cluster API and BYOH, with the prefix `cluster.x-k8s.io/` or a subdomain of it, are not allowed.
 ```
 --metricsbindaddress string
 ```

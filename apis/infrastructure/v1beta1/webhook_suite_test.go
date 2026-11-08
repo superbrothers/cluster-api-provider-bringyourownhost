@@ -47,6 +47,10 @@ var (
 	testEnv              *envtest.Environment
 	ctx                  context.Context
 	cancel               context.CancelFunc
+
+	// Host3K8sClient is the client of the agent of host3, which a test lets
+	// use more verbs with RBAC than the agents, to check the webhook alone.
+	Host3K8sClient client.Client
 )
 
 func TestAPIs(t *testing.T) {
@@ -145,6 +149,14 @@ var _ = BeforeSuite(func() {
 	ValidUserK8sClient, err = client.New(validUser.Config(), client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	host3, err := testEnv.ControlPlane.AddUser(envtest.User{
+		Name:   "byoh:host:host3",
+		Groups: []string{"byoh:hosts"},
+	}, nil)
+	Expect(err).NotTo(HaveOccurred())
+	Host3K8sClient, err = client.New(host3.Config(), client.Options{Scheme: scheme.Scheme})
+	Expect(err).NotTo(HaveOccurred())
 
 	mgr.GetWebhookServer().Register("/validate-infrastructure-cluster-x-k8s-io-v1beta1-byohost", &webhook.Admission{Handler: byohv1beta1.NewByoHostValidator(scheme.Scheme)})
 

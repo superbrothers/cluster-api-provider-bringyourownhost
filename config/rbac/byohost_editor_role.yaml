@@ -1,4 +1,6 @@
-# permissions for end users to edit byohosts.
+# Permissions of the agents (the group byoh:hosts) on ByoHosts. An agent
+# creates the ByoHost of its host, and then writes only its status. The ByoHost
+# webhook limits each agent to its own ByoHost.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -10,7 +12,6 @@ rules:
   - byohosts
   verbs:
   - create
-  - delete
   - get
   - list
   - watch
