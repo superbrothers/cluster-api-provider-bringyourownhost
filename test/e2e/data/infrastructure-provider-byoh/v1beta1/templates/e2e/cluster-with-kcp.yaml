@@ -70,14 +70,17 @@ spec:
       controllerManager:
         extraArgs: {enable-hostpath-provisioner: 'true'}
       apiServer:
-        certSANs: [localhost, 127.0.0.1, 0.0.0.0, host.docker.internal]
+        # kubeadm adds the advertise address, the control plane endpoint and the
+        # IP of the kubernetes Service. The loopback lets the clients on the
+        # control plane hosts reach the API server of the host without the
+        # endpoint.
+        certSANs: [localhost, 127.0.0.1]
     initConfiguration:
       nodeRegistration:
         ignorePreflightErrors:
         - Swap
         - DirAvailable--etc-kubernetes-manifests
         - FileAvailable--etc-kubernetes-kubelet.conf
-        criSocket: /var/run/containerd/containerd.sock
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
           # The hosts of the tests share the swap of the machine that runs them.
@@ -88,7 +91,6 @@ spec:
         - Swap
         - DirAvailable--etc-kubernetes-manifests
         - FileAvailable--etc-kubernetes-kubelet.conf
-        criSocket: /var/run/containerd/containerd.sock
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
           # The hosts of the tests share the swap of the machine that runs them.

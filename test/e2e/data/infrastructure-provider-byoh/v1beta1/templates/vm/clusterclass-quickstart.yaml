@@ -159,24 +159,24 @@ spec:
       kubeadmConfigSpec:
         clusterConfiguration:
           apiServer:
+            # kubeadm adds the advertise address, the control plane endpoint and
+            # the IP of the kubernetes Service. The loopback lets the clients on
+            # the control plane hosts reach the API server of the host without
+            # the endpoint.
             certSANs:
               - localhost
               - 127.0.0.1
-              - 0.0.0.0
-              - host.docker.internal
           controllerManager:
             extraArgs:
               enable-hostpath-provisioner: "true"
         initConfiguration:
           nodeRegistration:
-            criSocket: /var/run/containerd/containerd.sock
             ignorePreflightErrors:
             - Swap
             - DirAvailable--etc-kubernetes-manifests
             - FileAvailable--etc-kubernetes-kubelet.conf
         joinConfiguration:
           nodeRegistration:
-            criSocket: /var/run/containerd/containerd.sock
             ignorePreflightErrors:
             - Swap
             - DirAvailable--etc-kubernetes-manifests
