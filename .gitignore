@@ -36,8 +36,5 @@ _artifacts
 # editor settings
 .vscode
 
-# Tilt tmp files
-.tiltbuild/
-
 # macOS Desktop Service Store files
 .DS_Store

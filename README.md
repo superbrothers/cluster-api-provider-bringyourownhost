@@ -44,7 +44,7 @@ This project is currently a work-in-progress, in an Alpha state, so it may not b
 
 ### Launching a Kubernetes cluster using BYOH source code
 
-Check out the [developer guide](./docs/local_dev.md) for launching a BYOH cluster consisting of Docker containers as hosts.
+Check out the [developer guide](./docs/local_dev.md) for the end-to-end tests, which launch BYOH clusters with Docker containers as hosts from the source.
 
 ## Implement Custom Installer controller
 An installer controller is responsible to provide the installation and uninstallation scripts for k8s dependencies, prerequisites and components on each `BYOHost`.  
