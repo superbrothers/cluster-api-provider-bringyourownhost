@@ -57,13 +57,14 @@ jobs:
     - name: Raise the inotify limits
       run: sudo sysctl -w fs.inotify.max_user_instances=512 fs.inotify.max_user_watches=524288
 
-    # Ginkgo stops the whole suite after 1h by default.
+    # Pull requests run the same target as the developers do locally. Ginkgo
+    # stops the whole suite after 1h by default.
     - name: Run the e2e tests
       env:
-        GINKGO_FOCUS: ${{ github.event_name == 'pull_request' && '\[PR-Blocking\]' || inputs.focus }}
+        GINKGO_FOCUS: ${{ inputs.focus }}
         GINKGO_NOCOLOR: 'true'
         GINKGO_ARGS: --timeout=2h
-      run: yes | make test-e2e
+      run: yes | make ${{ github.event_name == 'pull_request' && 'test-e2e-pr-blocking' || 'test-e2e' }}
 
     # The logs of the controllers and the dumps of the resources.
     - name: Upload the artifacts
