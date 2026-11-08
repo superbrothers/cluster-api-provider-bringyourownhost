@@ -1,0 +1,21 @@
+#!/bin/sh
+# Copyright 2026 The Cluster API Provider BringYourOwnHost Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+# Stop the agent only when the package is removed. On an upgrade, postinst
+# restarts it.
+#
+# Removing the package does not clean up the host: it never runs kubeadm reset
+# or the uninstall script of the installer, so that removing the package does
+# not break a running node.
+case "$1" in
+    remove)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop byoh-hostagent.service || true
+        fi
+        ;;
+esac
+
+exit 0

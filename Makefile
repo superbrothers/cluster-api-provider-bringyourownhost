@@ -255,6 +255,12 @@ YQ = $(shell pwd)/bin/yq-$(YQ_VER)
 yq: ## Download yq locally if necessary.
 	$(call go-get-tool,$(YQ),github.com/mikefarah/yq/v4@$(YQ_VER))
 
+NFPM_VER := v2.48.0
+# Not in bin, which the container that builds the host agent creates as root.
+NFPM = $(TOOLS_BIN_DIR)/nfpm-$(NFPM_VER)
+nfpm: ## Download nfpm locally if necessary.
+	$(call go-get-tool,$(NFPM),github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VER))
+
 host-agent-binaries: $(addprefix host-agent-binary-,$(HOST_AGENT_ARCHS)) ## Builds the binaries for the host-agent
 
 host-agent-binary-%:
@@ -273,14 +279,27 @@ host-agent-binary: $(RELEASE_DIR)
 		go build -buildvcs=false -a -ldflags "$(GOLDFLAGS)" \
 		-o ./bin/$(notdir $(RELEASE_BINARY))-$(GOOS)-$(GOARCH) $(HOST_AGENT_DIR)
 
+# The version of the deb packages of the host agent in semver, without the
+# leading v: the tag on HEAD, the last tag followed by the number of commits
+# since it and the commit, or 0.0.0-dev when there is no tag. It names the
+# files as it is, and nfpm turns a pre-release such as 0.6.0-rc.0 into the
+# version 0.6.0~rc.0 in the package, which dpkg orders before 0.6.0.
+DEB_VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed -E 's/^v//; s/-([0-9]+)-g([0-9a-f]+)$$/+\1.g\2/'),0.0.0-dev)
+
+host-agent-debs: $(addprefix host-agent-deb-,$(HOST_AGENT_ARCHS)) ## Build the deb packages of the host agent
+
+host-agent-deb-%: host-agent-binary-% nfpm $(RELEASE_DIR)
+	GOARCH=$* DEB_VERSION=$(DEB_VERSION) $(NFPM) package \
+		--config packaging/byoh-hostagent/nfpm.yaml \
+		--packager deb \
+		--target $(RELEASE_DIR)/byoh-hostagent_$(DEB_VERSION)_$*.deb
 
 ##@ Release
 
 $(RELEASE_DIR):
-	rm -rf $(RELEASE_DIR)
 	mkdir -p $(RELEASE_DIR)
 
-build-release-artifacts: build-cluster-templates build-infra-yaml build-metadata-yaml build-host-agent-binary ## Builds release artifacts
+build-release-artifacts: build-cluster-templates build-infra-yaml build-metadata-yaml build-host-agent-binary host-agent-debs ## Builds release artifacts
 
 build-cluster-templates: $(RELEASE_DIR) cluster-templates
 	cp $(BYOH_TEMPLATES)/v1beta1/templates/docker/cluster-template.yaml $(RELEASE_DIR)/cluster-template-docker.yaml

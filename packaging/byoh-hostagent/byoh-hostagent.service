@@ -1,0 +1,37 @@
+# Copyright 2026 The Cluster API Provider BringYourOwnHost Authors.
+# SPDX-License-Identifier: Apache-2.0
+
+[Unit]
+Description=BYOH host agent
+Documentation=https://github.com/superbrothers/cluster-api-provider-bringyourownhost/blob/main/docs/byoh_agent.md
+Wants=network-online.target
+After=network-online.target
+# TLS with the management cluster needs a correct clock, which hosts without
+# an RTC such as Raspberry Pi get from the network. Order after
+# time-sync.target without pulling it in, as systemd.special(7) says.
+After=time-sync.target
+# Start only when the host is configured: a bootstrap kubeconfig to register
+# it, or the kubeconfig of a registered host.
+ConditionPathExists=|/etc/byoh-hostagent/bootstrap-kubeconfig
+ConditionPathExists=|/root/.byoh/config
+# Keep restarting until the management cluster is reachable.
+StartLimitIntervalSec=0
+
+[Service]
+# systemd sets HOME only when User= is set, and the agent keeps the kubeconfig
+# of the host in ~/.byoh/config.
+User=root
+EnvironmentFile=-/etc/default/byoh-hostagent
+# The agent writes temporary files to its working directory.
+StateDirectory=byoh-hostagent
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/byoh-hostagent
+# $BYOH_HOSTAGENT_ARGS is split at whitespace into separate arguments, so it
+# can hold several flags such as --label.
+ExecStart=/usr/bin/byoh-hostagent --bootstrap-kubeconfig=/etc/byoh-hostagent/bootstrap-kubeconfig $BYOH_HOSTAGENT_ARGS
+# The agent exits with 0 on some errors, so restart it on any exit.
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
