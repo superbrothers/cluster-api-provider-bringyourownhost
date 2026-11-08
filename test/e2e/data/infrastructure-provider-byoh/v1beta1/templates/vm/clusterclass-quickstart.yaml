@@ -173,14 +173,10 @@ spec:
           nodeRegistration:
             ignorePreflightErrors:
             - Swap
-            - DirAvailable--etc-kubernetes-manifests
-            - FileAvailable--etc-kubernetes-kubelet.conf
         joinConfiguration:
           nodeRegistration:
             ignorePreflightErrors:
             - Swap
-            - DirAvailable--etc-kubernetes-manifests
-            - FileAvailable--etc-kubernetes-kubelet.conf
 ---
 apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: KubeadmConfigTemplate

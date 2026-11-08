@@ -76,16 +76,12 @@ spec:
       nodeRegistration:
         ignorePreflightErrors:
         - Swap
-        - DirAvailable--etc-kubernetes-manifests
-        - FileAvailable--etc-kubernetes-kubelet.conf
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
     joinConfiguration:
       nodeRegistration:
         ignorePreflightErrors:
         - Swap
-        - DirAvailable--etc-kubernetes-manifests
-        - FileAvailable--etc-kubernetes-kubelet.conf
         kubeletExtraArgs:
           eviction-hard: nodefs.available<0%,nodefs.inodesFree<0%,imagefs.available<0%
   version: ${KUBERNETES_VERSION}

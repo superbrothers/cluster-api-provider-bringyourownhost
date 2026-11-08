@@ -79,14 +79,10 @@ spec:
       nodeRegistration:
         ignorePreflightErrors:
         - Swap
-        - DirAvailable--etc-kubernetes-manifests
-        - FileAvailable--etc-kubernetes-kubelet.conf
     joinConfiguration:
       nodeRegistration:
         ignorePreflightErrors:
         - Swap
-        - DirAvailable--etc-kubernetes-manifests
-        - FileAvailable--etc-kubernetes-kubelet.conf
   machineTemplate:
     infrastructureRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
