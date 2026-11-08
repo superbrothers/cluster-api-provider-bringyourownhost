@@ -57,9 +57,17 @@ version::get_version_vars() {
             echo "Please see more details here: https://semver.org"
             exit 1
         fi
+    else
+        # The repository has no release tag, so version the build as v0.0.0
+        # with the commit, which the agent also reports when it is built
+        # without this script (agent/version.AgentVersion).
+        GIT_VERSION="v0.0.0-$(git rev-parse --short=14 HEAD)"
+        if [[ "${GIT_TREE_STATE}" == "dirty" ]]; then
+            GIT_VERSION+="-dirty"
+        fi
+        GIT_MAJOR=0
+        GIT_MINOR=0
     fi
-
-    GIT_RELEASE_TAG=$(git describe --abbrev=0 --tags)
 }
 
 # stolen from sigs.k8s.io/cluster-api/hack/version.sh and modified

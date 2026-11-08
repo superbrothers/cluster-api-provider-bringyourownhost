@@ -281,10 +281,15 @@ host-agent-binary: $(RELEASE_DIR)
 
 # The version of the deb packages of the host agent in semver, without the
 # leading v: the tag on HEAD, the last tag followed by the number of commits
-# since it and the commit, or 0.0.0-dev when there is no tag. It names the
-# files as it is, and nfpm turns a pre-release such as 0.6.0-rc.0 into the
-# version 0.6.0~rc.0 in the package, which dpkg orders before 0.6.0.
-DEB_VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed -E 's/^v//; s/-([0-9]+)-g([0-9a-f]+)$$/+\1.g\2/'),0.0.0-dev)
+# since it and the commit, or, when there is no tag, 0.0.0-g followed by the
+# commit, with .dirty when the tree has changes, for the agent that reports
+# v0.0.0-<commit>. The commit has the prefix g, as a pre-release identifier of
+# only digits must not start with 0. It names the files as it is, and nfpm turns
+# a pre-release such as 0.6.0-rc.0 into the version 0.6.0~rc.0 in the package,
+# which dpkg orders before 0.6.0.
+DEB_COMMIT := $(shell git rev-parse --short=14 HEAD 2>/dev/null)
+DEB_DEV_VERSION = 0.0.0-$(if $(DEB_COMMIT),g$(DEB_COMMIT)$(if $(shell git status --porcelain 2>/dev/null),.dirty),unknown)
+DEB_VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed -E 's/^v//; s/-([0-9]+)-g([0-9a-f]+)$$/+\1.g\2/'),$(DEB_DEV_VERSION))
 
 host-agent-debs: $(addprefix host-agent-deb-,$(HOST_AGENT_ARCHS)) ## Build the deb packages of the host agent
 

@@ -366,6 +366,8 @@ sudo apt install ./byoh-hostagent_<version without v>_$(dpkg --print-architectur
 
 The upgrade restarts the agent if it is running. Do not upgrade the agent while its host is being provisioned or deleted, that is, while the Machine of the host is being created or deleted: the restart stops the installation script or kubeadm that the agent is running.
 
+The agent reports its version to its ByoHost every time it starts, so the column `AGENTVERSION` of `kubectl get byohosts` shows the version that each host runs.
+
 ### Stopping and removing the agent
 
 Stopping or removing the agent does not reset the host: the kubelet and the node keep running. To take a host out of a cluster, delete or scale down its Machine first, and wait until the agent resets the host and its ByoHost is no longer attached to a Machine.

@@ -48,6 +48,16 @@ type HostInfo struct {
 	Architecture string `json:"architecture,omitempty"`
 }
 
+// AgentInfo is what the host agent reports about itself every time it starts.
+type AgentInfo struct {
+	// Version is the version of the host agent. The version is embedded in the
+	// build, so a reported AgentInfo always has it; a build without a release
+	// tag reports v0.0.0 with the commit, such as v0.0.0-3b9fb48a7a58ce.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Version string `json:"version"`
+}
+
 // ByoHostStatus defines the observed state of ByoHost
 type ByoHostStatus struct {
 	// MachineRef is an optional reference to a Cluster API Machine
@@ -63,6 +73,11 @@ type ByoHostStatus struct {
 	// +optional
 	HostDetails HostInfo `json:"hostinfo,omitempty"`
 
+	// AgentInfo is what the host agent reports about itself. It is absent
+	// until the agent reports it.
+	// +optional
+	AgentInfo *AgentInfo `json:"agentInfo,omitempty"`
+
 	// Network returns the network status for each of the host's configured
 	// network interfaces.
 	// +optional
@@ -75,6 +90,7 @@ type ByoHostStatus struct {
 //+kubebuilder:printcolumn:name="OSName",type="string",JSONPath=`.status.hostinfo.osname`
 //+kubebuilder:printcolumn:name="OSImage",type="string",JSONPath=`.status.hostinfo.osimage`
 //+kubebuilder:printcolumn:name="Arch",type="string",JSONPath=`.status.hostinfo.architecture`
+//+kubebuilder:printcolumn:name="AgentVersion",type="string",JSONPath=`.status.agentInfo.version`
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // ByoHost is the Schema for the byohosts API
