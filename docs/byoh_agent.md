@@ -32,7 +32,7 @@ Labels to attach to the ByoHost CR in the form `labelname=labelVal` Eg: `--label
 ```
 --metricsbindaddress string
 ```
-metricsbindaddress is the TCP address that the controller should bind to for serving Prometheus metrics.It can be set to `0` to disable the metrics serving (default `:8080`)
+metricsbindaddress is the TCP address that the controller should bind to for serving Prometheus metrics over HTTP without authentication. It can be set to `0` to disable the metrics serving (default `127.0.0.1:8080`). The default serves them only on the loopback of the host; to scrape them from elsewhere, set an address that the scraper can reach, such as `:8080`, and restrict who can connect to it.
 ```
 --namespace string
 ```
