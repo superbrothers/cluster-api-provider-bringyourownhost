@@ -6,17 +6,17 @@ This is a guide on how to get started with Cluster API Provider BringYourOwnHost
 - clusterctl, which can be downloaded from the latest [release][releases] of Cluster API (CAPI) on GitHub.
 - [Kind][kind] can be used  to provide an initial management cluster for testing.
 - [kubectl][kubectl] is required to access your workload clusters.
-- Ubuntu 20.04 and above (Linux Kernel 5.4 and above) is required for accessing kernel configs during kubeadm preflight checks.
+- The hosts run Ubuntu 24.04 or 26.04 on amd64 or arm64, which the default installer supports (see [installer](installer.md)).
 
 ## Create a management cluster
 Cluster API requires an existing Kubernetes cluster accessible via kubectl. During the installation process the
-Kubernetes cluster will be transformed into a [management cluster](https://cluster-api.sigs.k8s.io/reference/glossary.html#management-cluster) by installing the Cluster API [provider components](https://cluster-api.sigs.k8s.io/reference/glossary.html#provider-components), so it is recommended to keep it separated from any application workload.
+Kubernetes cluster will be transformed into a [management cluster](https://cluster-api.sigs.k8s.io/reference/glossary.html#management-cluster) by installing the Cluster API [provider components](https://cluster-api.sigs.k8s.io/reference/glossary.html#provider-components), so it is recommended to keep it separated from any application workload. Its Kubernetes version must be one that Cluster API v1.14 supports for a management cluster, v1.33 to v1.37 (see [the supported versions](https://cluster-api.sigs.k8s.io/reference/versions)).
 
 **Choose one of the options below:**
 
 1. **Existing Management Cluster**
 
-    For production use-cases a "real" Kubernetes cluster should be used with appropriate backup and DR policies and procedures in place. The Kubernetes cluster must be at least greater than v1.22.x.
+    For production use-cases a "real" Kubernetes cluster should be used with appropriate backup and DR policies and procedures in place.
 
     ```bash
     export KUBECONFIG=<...>
@@ -50,9 +50,7 @@ Kubernetes cluster will be transformed into a [management cluster](https://clust
 ---
 [kind] is not designed for production use.
 
-**Minimum [kind] supported version**: v0.9.0
-
-Note for macOS users: you may need to [increase the memory available](https://docs.docker.com/docker-for-mac/#resources) for containers (recommend 6Gb for CAPD).
+Use a release of [kind] that creates a cluster of one of the versions above. The end-to-end tests run the management cluster with Kubernetes v1.36.4 on kind.
 
 ---
 
@@ -280,7 +278,7 @@ Generate the cluster.yaml for workload cluster
     ```shell
     CONTROL_PLANE_ENDPOINT_IP=10.10.10.10 clusterctl generate cluster byoh-cluster \
       --infrastructure byoh \
-      --kubernetes-version v1.26.6 \
+      --kubernetes-version v1.36.6 \
       --control-plane-machine-count 1 \
       --worker-machine-count 1 > cluster.yaml
     ```
@@ -289,7 +287,7 @@ Generate the cluster.yaml for workload cluster
     ```shell
     CONTROL_PLANE_ENDPOINT_IP=10.10.10.10 clusterctl generate cluster byoh-cluster \
         --infrastructure byoh \
-        --kubernetes-version v1.26.6 \
+        --kubernetes-version v1.36.6 \
         --control-plane-machine-count 1 \
         --worker-machine-count 1 \
         --flavor docker > cluster.yaml
@@ -323,8 +321,9 @@ after that you should see your nodes turn into ready:
 
 ```shell
 $ KUBECONFIG=byoh-cluster.kubeconfig kubectl get nodes
-NAME                                                          STATUS     ROLES    AGE   VERSION
-byoh-cluster-8siai8                                           Ready      master   5m   v1.26.6
+NAME    STATUS   ROLES           AGE   VERSION
+host1   Ready    control-plane   5m    v1.36.6
+host2   Ready    <none>          4m    v1.36.6
 ```
 
 ## Managing the agent on your hosts
@@ -378,9 +377,6 @@ Stopping or removing the agent does not reset the host: the kubelet and the node
 
 <!-- References -->
 [cluster-api-book]: https://cluster-api.sigs.k8s.io/
-[glossary-bootstrapping]: https://cluster-api.sigs.k8s.io/reference/glossary.html#bootstrap
 [kind]: https://kind.sigs.k8s.io
-[glossary-management-cluster]: https://github.com/kubernetes-sigs/cluster-api/blob/master/docs/book/GLOSSARY.md#management-cluster
 [releases]: https://github.com/kubernetes-sigs/cluster-api/releases
-[docker]: https://docs.docker.com/glossary/?term=install
 [kubectl]: https://kubernetes.io/docs/tasks/tools/install-kubectl/
