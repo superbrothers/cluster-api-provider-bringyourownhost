@@ -26,6 +26,9 @@ spec:
         - jsonPath: .status.hostinfo.architecture
           name: Arch
           type: string
+        - jsonPath: .status.agentInfo.version
+          name: AgentVersion
+          type: string
         - jsonPath: .metadata.creationTimestamp
           name: Age
           type: date
@@ -153,6 +156,21 @@ spec:
             status:
               description: ByoHostStatus defines the observed state of ByoHost
               properties:
+                agentInfo:
+                  description: |-
+                    AgentInfo is what the host agent reports about itself. It is absent
+                    until the agent reports it.
+                  properties:
+                    version:
+                      description: |-
+                        Version is the version of the host agent. The version is embedded in the
+                        build, so a reported AgentInfo always has it; a build without a release
+                        tag reports v0.0.0 with the commit, such as v0.0.0-3b9fb48a7a58ce.
+                      minLength: 1
+                      type: string
+                  required:
+                    - version
+                  type: object
                 conditions:
                   description: Conditions defines current service state of the BYOMachine.
                   items:

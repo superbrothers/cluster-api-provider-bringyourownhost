@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -399,51 +400,53 @@ var _ = Describe("Agent", func() {
 	Context("When --version flag is created using 'version.sh' script", func() {
 		var (
 			tmpHostAgentBinary string
-			gitMajor           string
-			gitMinor           string
-			gitVersion         string
-			err                error
+			// versionVars has the values that hack/version.sh passes to the
+			// version package, such as GitVersion.
+			versionVars map[string]string
+			tagged      bool
 		)
 		BeforeEach(func() {
-			command := exec.Command("/bin/sh", "-c", "git describe --tags --abbrev=14 --match 'v[0-9]*' 2>/dev/null")
-			command.Stderr = os.Stderr
-			cmdOut, _ := command.Output()
-			gitVersion = strings.TrimSuffix(string(cmdOut), "\n")
+			root, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+			Expect(err).NotTo(HaveOccurred())
+			ldflags, err := exec.Command(strings.TrimSuffix(string(root), "\n") + "/hack/version.sh").Output()
+			Expect(err).NotTo(HaveOccurred())
 
-			gitVersion = strings.Split(gitVersion, "-")[0]
-			gitVars := strings.Split(gitVersion, ".")
-			if len(gitVars) > 1 {
-				gitMajor = gitVars[0][1:]
-				gitMinor = gitVars[1]
+			// The script prints -X 'github.com/.../agent/version.<Name>=<value>'.
+			versionVars = map[string]string{}
+			for _, m := range regexp.MustCompile(`/agent/version\.(\w+)=([^']*)'`).FindAllStringSubmatch(string(ldflags), -1) {
+				versionVars[m[1]] = m[2]
 			}
+			Expect(versionVars).To(HaveKey("GitVersion"))
 
-			root, _ := exec.Command("/bin/sh", "-c", "git rev-parse --show-toplevel").Output()
-			cmd := exec.Command("/bin/sh", "-c", strings.TrimSuffix(string(root), "\n")+"/hack/version.sh")
-			ldflags, _ := cmd.Output()
+			// The script versions a tree without a release tag as v0.0.0.
+			tagged = exec.Command("git", "describe", "--tags", "--match", "v[0-9]*").Run() == nil
+
 			tmpHostAgentBinary, err = gexec.Build("github.com/superbrothers/cluster-api-provider-bringyourownhost/agent", "-ldflags", string(ldflags))
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
 			tmpHostAgentBinary = ""
-			gitMajor = ""
-			gitMinor = ""
-			gitVersion = ""
+			versionVars = nil
 		})
 
 		It("should match local generated git values", func() {
 			out, err := exec.Command(tmpHostAgentBinary, "--version").Output()
 			Expect(err).NotTo(HaveOccurred())
 
-			majorExpected := "Major:\"" + gitMajor + "\""
-			Expect(out).Should(ContainSubstring(majorExpected))
+			Expect(out).Should(ContainSubstring(fmt.Sprintf("Major:%q", versionVars["GitMajor"])))
+			Expect(out).Should(ContainSubstring(fmt.Sprintf("Minor:%q", versionVars["GitMinor"])))
+			Expect(out).Should(ContainSubstring(fmt.Sprintf("GitVersion:%q", versionVars["GitVersion"])))
+			Expect(out).Should(ContainSubstring(fmt.Sprintf("GitCommit:%q", versionVars["GitCommit"])))
+			Expect(out).Should(ContainSubstring(fmt.Sprintf("GitTreeState:%q", versionVars["GitTreeState"])))
 
-			minorExpected := "Minor:\"" + gitMinor + "\""
-			Expect(out).Should(ContainSubstring(minorExpected))
-
-			gitVersionExpected := "GitVersion:\"" + gitVersion
-			Expect(out).Should(ContainSubstring(gitVersionExpected))
-
+			if tagged {
+				Expect(versionVars["GitVersion"]).To(HavePrefix(fmt.Sprintf("v%s.%s.", versionVars["GitMajor"], versionVars["GitMinor"])))
+			} else {
+				Expect(versionVars["GitVersion"]).To(MatchRegexp(`^v0\.0\.0-[0-9a-f]{14}(-dirty)?$`))
+				Expect(versionVars["GitMajor"]).To(Equal("0"))
+				Expect(versionVars["GitMinor"]).To(Equal("0"))
+			}
 		})
 	})
 

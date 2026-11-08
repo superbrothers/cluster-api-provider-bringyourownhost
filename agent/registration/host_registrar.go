@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackpal/gateway"
 	"github.com/pkg/errors"
+	"github.com/superbrothers/cluster-api-provider-bringyourownhost/agent/version"
 	infrastructurev1beta1 "github.com/superbrothers/cluster-api-provider-bringyourownhost/apis/infrastructure/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,7 +77,8 @@ func (hr *HostRegistrar) Register(hostName, namespace string, hostLabels map[str
 	return hr.UpdateHost(ctx, byoHost)
 }
 
-// UpdateHost updates the network interface and host platform details status for the host
+// UpdateHost updates the network interface, the host platform details and the
+// agent info in the status of the host
 func (hr *HostRegistrar) UpdateHost(ctx context.Context, byoHost *infrastructurev1beta1.ByoHost) error {
 	klog.Info("Add Network Info")
 	helper, err := v1beta1patch.NewHelper(byoHost, hr.K8sClient)
@@ -89,6 +91,10 @@ func (hr *HostRegistrar) UpdateHost(ctx context.Context, byoHost *infrastructure
 	klog.Info("Attach Host Platform details")
 	if byoHost.Status.HostDetails, err = hr.getHostInfo(); err != nil {
 		return err
+	}
+
+	byoHost.Status.AgentInfo = &infrastructurev1beta1.AgentInfo{
+		Version: version.AgentVersion(),
 	}
 
 	return helper.Patch(ctx, byoHost)
